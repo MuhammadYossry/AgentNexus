@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agents Directory</title>
+    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+    <style>
+        @keyframes shimmer {
+            100% { transform: translateX(100%); }
+        }
+        .skeleton {
+            position: relative;
+            overflow: hidden;
+            background: #f3f4f6;
+        }
+        .skeleton::after {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            transform: translateX(-100%);
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: shimmer 1.5s infinite;
+            content: '';
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+        // Utility Functions
+        const API = {
+            async fetchAgents() {
+                const res = await fetch('/agents.json');
+                if (!res.ok) throw new Error('Failed to fetch agents');
+                return res.json();
+            }
+        };
+
+        // Components
+        const Badge = ({ children, variant = 'default' }) => {
+            const styles = {
+                default: 'bg-blue-100 text-blue-800',
+                success: 'bg-green-100 text-green-800',
+                purple: 'bg-purple-100 text-purple-800',
+                gray: 'bg-gray-100 text-gray-800'
+            };
+            
+            return React.createElement('span', {
+                className: `px-2 py-1 rounded-full text-sm font-medium ${styles[variant]}`
+            }, children);
+        };
+
+        const SkillBadge = ({ path = [] }) => (
+            React.createElement('div', { className: 'flex flex-wrap gap-2' },
+                path.map((skill, idx) => 
+                    React.createElement(React.Fragment, { key: skill },
+                        React.createElement(Badge, { variant: 'purple' }, skill),
+                        idx < path.length - 1 && 
+                            React.createElement('span', { className: 'text-purple-400' }, '→')
+                    )
+                )
+            )
+        );
+
+        const AgentCard = ({ agent }) => {
+            const getIcon = (name) => {
+                const icons = {
+                    code: 'M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25',
+                    bot: 'M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z'
+                };
+                return icons[name.toLowerCase().includes('code') ? 'code' : 'bot'];
+            };
+
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow-sm border p-6 hover:shadow-lg transition-all duration-200'
+            },
+                React.createElement('div', { className: 'flex items-start gap-4' },
+                    React.createElement('div', { 
+                        className: 'p-3 bg-blue-50 text-blue-600 rounded-lg'
+                    },
+                        React.createElement('svg', {
+                            className: 'w-6 h-6',
+                            fill: 'none',
+                            viewBox: '0 0 24 24',
+                            strokeWidth: 1.5,
+                            stroke: 'currentColor'
+                        },
+                            React.createElement('path', {
+                                strokeLinecap: 'round',
+                                strokeLinejoin: 'round',
+                                d: getIcon(agent.name)
+                            })
+                        )
+                    ),
+                    React.createElement('div', { className: 'flex-1' },
+                        React.createElement('div', { className: 'flex items-center gap-2 mb-2' },
+                            React.createElement('h3', { 
+                                className: 'text-lg font-semibold'
+                            }, agent.name),
+                            React.createElement(Badge, { 
+                                variant: 'purple'
+                            }, `v${agent.version}`)
+                        ),
+                        React.createElement('p', { 
+                            className: 'text-gray-600 mb-4'
+                        }, agent.description),
+                        React.createElement('div', { className: 'space-y-2' },
+                            agent.capabilities?.map((cap, idx) => 
+                                React.createElement('div', { key: idx },
+                                    React.createElement(SkillBadge, { path: cap.skill_path })
+                                )
+                            )
+                        ),
+                        React.createElement('a', {
+                            href: `/agents/${agent.slug}`,
+                            className: 'inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors'
+                        }, 'View Details')
+                    )
+                )
+            );
+        };
+
+        const SkeletonCard = () => {
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow-sm border p-6'
+            },
+                React.createElement('div', { className: 'animate-pulse space-y-4' },
+                    React.createElement('div', { className: 'skeleton h-8 w-1/4 rounded' }),
+                    React.createElement('div', { className: 'skeleton h-4 w-3/4 rounded' }),
+                    React.createElement('div', { className: 'space-y-2' },
+                        React.createElement('div', { className: 'skeleton h-6 w-1/2 rounded' }),
+                        React.createElement('div', { className: 'skeleton h-6 w-2/3 rounded' })
+                    )
+                )
+            );
+        };
+
+        // Main App Component
+        function AgentsDirectory() {
+            const [agents, setAgents] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            const [error, setError] = React.useState(null);
+
+            React.useEffect(() => {
+                API.fetchAgents()
+                    .then(data => {
+                        setAgents(data.agents);
+                        setLoading(false);
+                    })
+                    .catch(err => {
+                        setError(err.message);
+                        setLoading(false);
+                    });
+            }, []);
+
+            if (error) {
+                return React.createElement('div', {
+                    className: 'min-h-screen flex items-center justify-center'
+                },
+                    React.createElement('div', {
+                        className: 'bg-red-50 text-red-600 p-4 rounded-lg'
+                    }, `Error: ${error}`)
+                );
+            }
+
+            return React.createElement('div', {
+                className: 'min-h-screen bg-gray-50 py-12'
+            },
+                React.createElement('div', {
+                    className: 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'
+                },
+                    React.createElement('header', {
+                        className: 'text-center mb-12'
+                    },
+                        React.createElement('h1', {
+                            className: 'text-4xl font-bold text-gray-900 mb-4'
+                        }, 'AI Agent Directory'),
+                        React.createElement('p', {
+                            className: 'text-xl text-gray-600'
+                        }, 'Explore our collection of specialized AI agents')
+                    ),
+                    React.createElement('div', {
+                        className: 'grid grid-cols-1 gap-6 lg:grid-cols-2'
+                    },
+                        loading
+                            ? Array(4).fill(null).map((_, idx) => 
+                                React.createElement(SkeletonCard, { key: idx }))
+                            : agents.map(agent => 
+                                React.createElement(AgentCard, {
+                                    key: agent.slug,
+                                    agent: agent
+                                }))
+                    )
+                )
+            );
+        }
+
+        // Mount App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(AgentsDirectory));
+    </script>
+</body>
+</html>
