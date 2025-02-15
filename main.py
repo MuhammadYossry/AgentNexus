@@ -1,16 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from agents_manifest.manifest_generator import setup_agent_routes
+from agents_manifest.base_types import Capability
+from agents_manifest.manifest_generator import AgentManager, setup_agent_routes, configure_agent_routes, configure_agent
 
 # Import agent functions first to ensure decorators run
-from agents.flight_agent import search_flights, book_flight, plan_travel
-# Then import the configured apps
-from agents.code_agent_v2 import v2_app as code_agent_v2_app
-from agents.flight_agent import flight_app
+from agents.flight_agent import flight_agent_app
+from agents.code_agent_v1 import code_agent_v1_app
+from agents.code_agent_v2 import code_agent_v2_app
 
-app = FastAPI()
-
-app.add_middleware(
+def add_cors_middleware(app: FastAPI):
+    app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -18,11 +17,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount agent apps
-app.mount("/v1/flight_agent", flight_app, name="flight_agent")
-app.mount("/v2/code_agent", code_agent_v2_app, name="code_agent_v2")
+def create_app():
+    app = FastAPI()
+    add_cors_middleware(app)
+    agent_manager = AgentManager(base_url="http://localhost:9200")
+    agent_manager.add_agent(flight_agent_app)
+    agent_manager.add_agent(code_agent_v1_app)
+    agent_manager.add_agent(code_agent_v2_app)
+    agent_manager.setup_agents(app)
+    setup_agent_routes(app)
+    return app
 
-setup_agent_routes(app)
+app = create_app()
 
 @app.get("/debug/routes", include_in_schema=False)
 async def list_routes():

@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any, Literal
 import datetime
 from enum import Enum
 
-from agents_manifest.base_types import ActionType, Capability
+from agents_manifest.base_types import ActionType, Capability, AgentConfig
 from agents_manifest.action_manager import agent_action
 from agents_manifest.manifest_generator import configure_agent
 from agents.llm_client import create_llm_client
@@ -124,17 +124,20 @@ FLIGHT_CAPABILITIES = [
     )
 ]
 
-app = FastAPI()
+flight_agent_app = AgentConfig(
+    name="Flight Assistant",
+    version="1.0.0",
+    description="Advanced flight search and booking agent",
+    base_path="/v1/flight_agent",
+    capabilities=FLIGHT_CAPABILITIES
+)
 
-
-
-
-# @flight_app.post("/flight_agent/search", response_model=FlightSearchOutput)
 @agent_action(
+    agent_config=flight_agent_app,
     action_type=ActionType.GENERATE,
     name="Search Flights",
     description="Search for available flights based on criteria",
-    response_template_md="flight_search.md",
+    response_template_md="search_flights.md",
     schema_definitions={
         "FlightDetails": FlightDetails,
         "SeatClass": SeatClass
@@ -191,9 +194,9 @@ async def search_flights(input_data: FlightSearchInput) -> FlightSearchOutput:
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-# @flight_app.post("/flight_agent/book", response_model=BookingOutput)
+  
 @agent_action(
+    agent_config=flight_agent_app,
     action_type=ActionType.GENERATE,
     name="Book Flight",
     description="Book a flight with specified details and seat preferences",
@@ -252,6 +255,7 @@ async def book_flight(
 
 # @flight_app.post("/flight_agent/plan_travel", response_model=TravelPlanResponse)
 @agent_action(
+    agent_config=flight_agent_app,
     action_type=ActionType.GENERATE,
     name="Plan Travel",
     description="Generate a comprehensive travel plan",
@@ -369,13 +373,3 @@ async def plan_travel(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-# Configure flight agent
-flight_app = configure_agent(
-    app=app,
-    base_url="http://localhost:9200",
-    name="Flight Assistant",
-    version="1.0.0",
-    description="Advanced flight search and booking agent",
-    capabilities=FLIGHT_CAPABILITIES
-)

@@ -6,8 +6,9 @@ import inspect
 import re
 from loguru import logger
 from datetime import datetime
+from pathlib import Path
 from dataclasses import dataclass
-from agents_manifest.base_types import ActionType, BaseMetadata
+from agents_manifest.base_types import ActionType, BaseMetadata, AgentConfig
 
 #XXX Duplicate
 def slugify(text: str) -> str:
@@ -52,14 +53,17 @@ class ActionRegistry:
         """Get action endpoint info by slug."""
         return self.actions.get(action_slug)
 
-# Global registry (one per agent)
-_action_registry = ActionRegistry()
+agent_registries: Dict[str, ActionRegistry] = {}
 
-def get_action_registry() -> ActionRegistry:
-    """Expose the global action registry."""
-    return _action_registry
+def get_action_registry(agent_name: str) -> ActionRegistry:
+    """Get or create action registry for an agent."""
+    agent_slug = slugify(agent_name)
+    if agent_slug not in agent_registries:
+        agent_registries[agent_slug] = ActionRegistry()
+    return agent_registries[agent_slug]
 
 def agent_action(
+    agent_config: AgentConfig,
     action_type: ActionType,
     name: str,
     description: str,
@@ -70,6 +74,11 @@ def agent_action(
     step_id: Optional[str] = None
 ) -> Callable:
     def decorator(func: Callable) -> Callable:
+        logger.debug(f"Decorating function: {func.__name__}")
+        template_path = None
+        if response_template_md is not None:
+            template_path = Path(__file__).parent / "templates" / response_template_md
+            logger.debug(f"Template path: {template_path}")
         sig = inspect.signature(func)
         input_model = next(
             (param.annotation for param in sig.parameters.values() 
@@ -81,13 +90,13 @@ def agent_action(
             if hasattr(func.__annotations__.get('return', None), '__origin__')
             else func.__annotations__.get('return')
         )
-        # Create endpoint info
+        action_slug = slugify(name)
         endpoint_info = ActionEndpointInfo(
             metadata=ActionMetadata(
                 action_type=action_type,
                 name=name,
                 description=description,
-                response_template_md=response_template_md,
+                response_template_md=str(template_path) if template_path else None,
                 workflow_id=workflow_id,
                 step_id=step_id
             ),
@@ -97,37 +106,34 @@ def agent_action(
             schema_definitions=schema_definitions,
             examples=examples
         )
-        # Register immediately with global registry
-        action_slug = slugify(name)
-        _action_registry.register_action(action_slug, endpoint_info)
-
+        get_action_registry(agent_config.name).register_action(action_slug, endpoint_info)
         return func
-
     return decorator
 
 def configure_action_routes(app: FastAPI, registry: ActionRegistry, agent_slug: str):
-    """Configure action routes for a FastAPI application."""
-    logger.debug(f"Configuring action routes for agent {agent_slug}")
-    
+    logger.debug(f"Configuring routes for {agent_slug}")
     for action_slug, endpoint_info in registry.actions.items():
-        logger.debug(f"Setting up route for action {action_slug}")
         route_path = f"/agents/{agent_slug}/actions/{action_slug}"
         endpoint_info.route_path = route_path
-
-        def create_handler(endpoint_info=endpoint_info):
-            async def handle_action(data: endpoint_info.input_model):
-                try:
-                    result = await endpoint_info.handler(data)
-                    if endpoint_info.metadata.response_template_md and isinstance(result, dict):
+        logger.debug(f"Setting up route: {route_path}")
+        @app.post(route_path)
+        async def handle_action(
+            request_data: endpoint_info.input_model,
+            action_info: ActionEndpointInfo = endpoint_info
+        ):
+            try:
+                result = await action_info.handler(request_data)
+                if action_info.metadata.response_template_md:
+                    template_path = Path(action_info.metadata.response_template_md)
+                    if template_path.exists():
+                        template_content = template_path.read_text()
                         from jinja2 import Template
-                        template_content = endpoint_info.metadata.response_template_md
                         rendered = Template(template_content).render(**result)
                         return Response(content=rendered, media_type="text/markdown")
-                    return result
-                except Exception as e:
-                    logger.error(f"Error in action handler: {str(e)}")
-                    raise HTTPException(status_code=500, detail=str(e))
-            return handle_action
+                return result
+            except Exception as e:
+                logger.error(f"Error in action handler: {str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
 
         # Add route to app
         handler = create_handler()

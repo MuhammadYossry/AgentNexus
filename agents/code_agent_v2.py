@@ -1,15 +1,96 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
+from loguru import logger
 
+from agents_manifest.base_types import AgentConfig
 from agents_manifest.manifest_generator import configure_agent
-from agents_manifest.workflow_manager import (
-    Workflow, WorkflowStep, WorkflowStepType,
-    WorkflowTransition, WorkflowDataMapping,
-    workflow_step
+from agents_manifest.workflow_manager import workflow_step
+from agents_manifest.base_types import (
+    ActionType, Capability, Workflow,
+    WorkflowStep, WorkflowStepType,
+    WorkflowTransition, WorkflowDataMapping
 )
-from agents_manifest.base_types import ActionType, Capability
 from agents_manifest.session_manager import SessionManager
+from agents.llm_client import create_llm_client
+
+# Define models
+class InitiateRequest(BaseModel):
+    message: str = Field(..., description="User's code generation request")
+    context: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
+class InitiateResponse(BaseModel):
+    session_id: str
+    questionnaire_form: Dict[str, Any]
+    message: Optional[str] = None
+
+class ExecuteRequest(BaseModel):
+    session_id: str
+    form_data: Dict[str, Any]
+
+class ExecuteResponse(BaseModel):
+    generated_code: str
+    documentation: str
+    test_cases: Optional[List[str]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+# Define workflow
+CODE_GENERATION_WORKFLOW = Workflow(
+    id="code_generation",
+    name="Code Generation Flow",
+    description="Multi-step code generation process with form-based requirements gathering",
+    steps=[
+        WorkflowStep(
+            id="initiate",
+            type=WorkflowStepType.START,
+            action="initiate_code_generation",
+            transitions=[
+                WorkflowTransition(
+                    target="execute",
+                    data_mapping=[
+                        WorkflowDataMapping(
+                            source_field="questionnaire_form",
+                            target_field="form_data"
+                        ),
+                        WorkflowDataMapping(
+                            source_field="session_id",
+                            target_field="session_id"
+                        )
+                    ]
+                )
+            ]
+        ),
+        WorkflowStep(
+            id="execute",
+            type=WorkflowStepType.ACTION,
+            action="execute_code_generation",
+            transitions=[
+                WorkflowTransition(target="end")
+            ]
+        ),
+        WorkflowStep(
+            id="end",
+            type=WorkflowStepType.END
+        )
+    ],
+    initial_step="initiate"
+)
+
+# Initialize app
+code_agent_v2_app = AgentConfig(
+    name="Python Code Assistant V2",
+    version="2.0.0",
+    description="Advanced code generation with dynamic forms",
+    base_path="/v2/code_agent",
+    capabilities=[
+        Capability(
+            skill_path=["Development", "Code Generation"],
+            metadata={"version": "2.0", "features": ["dynamic_forms"]}
+        )
+    ],
+    workflows=[CODE_GENERATION_WORKFLOW]
+)
+session_manager = SessionManager()
 
 # Form Generation Logic
 def parse_form_response(response: str) -> dict:
@@ -55,6 +136,7 @@ def parse_form_response(response: str) -> dict:
 async def generate_code_form(query: str) -> dict:
     """Generate dynamic form based on code generation query."""
     # Define the form template
+    llm_client = create_llm_client()
     json_template = """
     {
       "questionnaire_form": {
@@ -176,90 +258,6 @@ Output only a strict JSON form structure.""",
     
     return parse_form_response(response)
 
-# Define models
-class InitiateRequest(BaseModel):
-    message: str = Field(..., description="User's code generation request")
-    context: Optional[Dict[str, Any]] = Field(default_factory=dict)
-
-class InitiateResponse(BaseModel):
-    session_id: str
-    questionnaire_form: Dict[str, Any]
-    message: Optional[str] = None
-
-class ExecuteRequest(BaseModel):
-    session_id: str
-    form_data: Dict[str, Any]
-
-class ExecuteResponse(BaseModel):
-    generated_code: str
-    documentation: str
-    test_cases: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-# Define workflow
-CODE_GENERATION_WORKFLOW = Workflow(
-    id="code_generation",
-    name="Code Generation Flow",
-    description="Multi-step code generation process with form-based requirements gathering",
-    steps=[
-        WorkflowStep(
-            id="initiate",
-            type=WorkflowStepType.START,
-            action="initiate_code_generation",
-            transitions=[
-                WorkflowTransition(
-                    target="execute",
-                    data_mapping=[
-                        WorkflowDataMapping(
-                            source_field="questionnaire_form",
-                            target_field="form_data"
-                        ),
-                        WorkflowDataMapping(
-                            source_field="session_id",
-                            target_field="session_id"
-                        )
-                    ]
-                )
-            ]
-        ),
-        WorkflowStep(
-            id="execute",
-            type=WorkflowStepType.ACTION,
-            action="execute_code_generation",
-            transitions=[
-                WorkflowTransition(target="end")
-            ]
-        ),
-        WorkflowStep(
-            id="end",
-            type=WorkflowStepType.END
-        )
-    ],
-    initial_step="initiate"
-)
-
-# Initialize app
-v2_app = configure_agent(
-    app=FastAPI(),
-    base_url="http://localhost:9200",
-    name="Python Code Assistant V2",
-    version="2.0.0",
-    description="Advanced code generation with dynamic forms",
-    capabilities=[
-        Capability(
-            skill_path=["Development", "Code Generation"],
-            metadata={
-                "version": "2.0",
-                "features": ["dynamic_forms", "context_aware", "session_based"],
-                "languages": ["Python"],
-                "frameworks": ["FastAPI", "Django", "Flask"]
-            }
-        )
-    ],
-    workflows=[CODE_GENERATION_WORKFLOW]
-)
-session_manager = SessionManager()
-
 # Define workflow steps using decorators
 @workflow_step(
     workflow_id="code_generation",
@@ -274,11 +272,144 @@ async def initiate_code_generation(request: InitiateRequest) -> InitiateResponse
         session_id = session_manager.create_session()
         # Store initial context
         session_manager.update_session(session_id, {
-            "query": request.message,
-            "initial_context": request.context
+            "query": request['message'],
+            "initial_context": request['context']
         })
         # Generate dynamic form based on query
-        form = await generate_code_form(request.message)
+        # form = await generate_code_form(request['message'])
+        form = {
+            "questionnaire_form": {
+                "steps": [
+                    {
+                        "title": "Code Specifications",
+                        "fields": [
+                            {
+                                "type": "select",
+                                "name": "framework",
+                                "label": "Primary Framework",
+                                "validation": {"required": True},
+                                "options": [
+                                    {"label": "React", "value": "react"},
+                                    {"label": "Vue.js", "value": "vue"},
+                                    {"label": "Angular", "value": "angular"},
+                                    {"label": "Svelte", "value": "svelte"}
+                                ]
+                            },
+                            {
+                                "type": "textarea",
+                                "name": "architecture_requirements",
+                                "label": "Architecture Requirements",
+                                "placeholder": "Describe your architectural needs (e.g., single-page application, server-side rendering, static site generation)",
+                                "validation": {"required": True}
+                            },
+                            {
+                                "type": "checkbox",
+                                "name": "key_functionalities",
+                                "label": "Key Functionalities Needed",
+                                "options": [
+                                    {"label": "User Authentication", "value": "auth"},
+                                    {"label": "Prompt Sharing", "value": "prompt_sharing"},
+                                    {"label": "Prompt Rating System", "value": "rating"},
+                                    {"label": "Search and Filter Prompts", "value": "search_filter"},
+                                    {"label": "User Profiles", "value": "profiles"}
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Technical Requirements",
+                        "fields": [
+                            {
+                                "type": "number",
+                                "name": "response_time",
+                                "label": "Maximum Response Time (ms)",
+                                "placeholder": "e.g., 200",
+                                "validation": {"required": True}
+                            },
+                            {
+                                "type": "checkbox",
+                                "name": "security_needs",
+                                "label": "Security Requirements",
+                                "options": [
+                                    {"label": "HTTPS Enforcement", "value": "https"},
+                                    {"label": "Content Security Policy (CSP)", "value": "csp"},
+                                    {"label": "Cross-Origin Resource Sharing (CORS)", "value": "cors"},
+                                    {"label": "Data Encryption at Rest", "value": "encryption"}
+                                ]
+                            },
+                            {
+                                "type": "textarea",
+                                "name": "integration_points",
+                                "label": "Integration Points",
+                                "placeholder": "Describe any third-party integrations (e.g., OpenAI API, payment gateways, analytics)",
+                                "validation": {"required": False}
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Development Preferences",
+                        "fields": [
+                            {
+                                "type": "select",
+                                "name": "code_style",
+                                "label": "Code Style Preferences",
+                                "options": [
+                                    {"label": "Prettier", "value": "prettier"},
+                                    {"label": "ESLint", "value": "eslint"},
+                                    {"label": "StandardJS", "value": "standardjs"}
+                                ]
+                            },
+                            {
+                                "type": "radio",
+                                "name": "documentation_level",
+                                "label": "Documentation Level",
+                                "options": [
+                                    {"label": "Minimal", "value": "minimal"},
+                                    {"label": "Moderate", "value": "moderate"},
+                                    {"label": "Comprehensive", "value": "comprehensive"}
+                                ]
+                            },
+                            {
+                                "type": "checkbox",
+                                "name": "testing_requirements",
+                                "label": "Testing Requirements",
+                                "options": [
+                                    {"label": "Unit Testing", "value": "unit"},
+                                    {"label": "Integration Testing", "value": "integration"},
+                                    {"label": "End-to-End Testing", "value": "e2e"}
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Implementation Details",
+                        "fields": [
+                            {
+                                "type": "textarea",
+                                "name": "specific_features",
+                                "label": "Specific Features",
+                                "placeholder": "Describe any specific features (e.g., real-time updates, dark mode, offline support)",
+                                "validation": {"required": True}
+                            },
+                            {
+                                "type": "textarea",
+                                "name": "data_structures",
+                                "label": "Data Structures",
+                                "placeholder": "Describe the data structures needed (e.g., user schema, prompt schema, rating schema)",
+                                "validation": {"required": True}
+                            },
+                            {
+                                "type": "textarea",
+                                "name": "api_endpoints",
+                                "label": "API Endpoints",
+                                "placeholder": "List any required API endpoints (e.g., GET /prompts, POST /prompts, PUT /prompts/{id})",
+                                "validation": {"required": False}
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
         return InitiateResponse(
             session_id=session_id,
             questionnaire_form=form,
