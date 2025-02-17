@@ -260,6 +260,7 @@ Output only a strict JSON form structure.""",
 
 # Define workflow steps using decorators
 @workflow_step(
+    agent_config=code_agent_v2_app,
     workflow_id="code_generation",
     step_id="initiate",
     action_type=ActionType.QUESTION,
@@ -420,6 +421,7 @@ async def initiate_code_generation(request: InitiateRequest) -> InitiateResponse
         raise HTTPException(status_code=400, detail=str(e))
 
 @workflow_step(
+    agent_config=code_agent_v2_app,
     workflow_id="code_generation",
     step_id="execute", 
     action_type=ActionType.GENERATE,

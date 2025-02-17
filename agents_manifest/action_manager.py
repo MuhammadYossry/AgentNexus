@@ -8,15 +8,7 @@ from loguru import logger
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass
-from agents_manifest.base_types import ActionType, BaseMetadata, AgentConfig
-
-#XXX Duplicate
-def slugify(text: str) -> str:
-    """Convert text to URL-safe slug."""
-    text = text.lower()
-    text = re.sub(r'[^\w\s-]', '', text)
-    text = re.sub(r'[-\s]+', '-', text)
-    return text.strip('-')
+from agents_manifest.base_types import ActionType, BaseMetadata, AgentConfig, slugify
 
 @dataclass
 class ActionMetadata:

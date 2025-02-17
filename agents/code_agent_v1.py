@@ -553,7 +553,138 @@ async def collect_requirements(input_data: CollectRequirementsInput) -> CollectR
     """Generate a structured requirements form based on the user's project description."""
     try:
         if not input_data.history:
-            questionnaire_form = await _generate_requirements_form(input_data.message)
+            # questionnaire_form = await _generate_requirements_form(input_data.message)
+            questionnaire_form = {
+                "steps": [
+                    {
+                        "title": "Code Specifications",
+                        "fields": [
+                            {
+                                "type": "select",
+                                "name": "framework",
+                                "label": "Primary Framework",
+                                "validation": {"required": True},
+                                "options": [
+                                    {"label": "React", "value": "react"},
+                                    {"label": "Vue.js", "value": "vue"},
+                                    {"label": "Angular", "value": "angular"},
+                                    {"label": "Svelte", "value": "svelte"}
+                                ]
+                            },
+                            {
+                                "type": "textarea",
+                                "name": "architecture_requirements",
+                                "label": "Architecture Requirements",
+                                "placeholder": "Describe your architectural needs (e.g., single-page application, server-side rendering, static site generation)",
+                                "validation": {"required": True}
+                            },
+                            {
+                                "type": "checkbox",
+                                "name": "key_functionalities",
+                                "label": "Key Functionalities Needed",
+                                "options": [
+                                    {"label": "User Authentication", "value": "auth"},
+                                    {"label": "Prompt Sharing", "value": "prompt_sharing"},
+                                    {"label": "Prompt Rating System", "value": "rating"},
+                                    {"label": "Search and Filter Prompts", "value": "search_filter"},
+                                    {"label": "User Profiles", "value": "profiles"}
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Technical Requirements",
+                        "fields": [
+                            {
+                                "type": "number",
+                                "name": "response_time",
+                                "label": "Maximum Response Time (ms)",
+                                "placeholder": "e.g., 200",
+                                "validation": {"required": True}
+                            },
+                            {
+                                "type": "checkbox",
+                                "name": "security_needs",
+                                "label": "Security Requirements",
+                                "options": [
+                                    {"label": "HTTPS Enforcement", "value": "https"},
+                                    {"label": "Content Security Policy (CSP)", "value": "csp"},
+                                    {"label": "Cross-Origin Resource Sharing (CORS)", "value": "cors"},
+                                    {"label": "Data Encryption at Rest", "value": "encryption"}
+                                ]
+                            },
+                            {
+                                "type": "textarea",
+                                "name": "integration_points",
+                                "label": "Integration Points",
+                                "placeholder": "Describe any third-party integrations (e.g., OpenAI API, payment gateways, analytics)",
+                                "validation": {"required": False}
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Development Preferences",
+                        "fields": [
+                            {
+                                "type": "select",
+                                "name": "code_style",
+                                "label": "Code Style Preferences",
+                                "options": [
+                                    {"label": "Prettier", "value": "prettier"},
+                                    {"label": "ESLint", "value": "eslint"},
+                                    {"label": "StandardJS", "value": "standardjs"}
+                                ]
+                            },
+                            {
+                                "type": "radio",
+                                "name": "documentation_level",
+                                "label": "Documentation Level",
+                                "options": [
+                                    {"label": "Minimal", "value": "minimal"},
+                                    {"label": "Moderate", "value": "moderate"},
+                                    {"label": "Comprehensive", "value": "comprehensive"}
+                                ]
+                            },
+                            {
+                                "type": "checkbox",
+                                "name": "testing_requirements",
+                                "label": "Testing Requirements",
+                                "options": [
+                                    {"label": "Unit Testing", "value": "unit"},
+                                    {"label": "Integration Testing", "value": "integration"},
+                                    {"label": "End-to-End Testing", "value": "e2e"}
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Implementation Details",
+                        "fields": [
+                            {
+                                "type": "textarea",
+                                "name": "specific_features",
+                                "label": "Specific Features",
+                                "placeholder": "Describe any specific features (e.g., real-time updates, dark mode, offline support)",
+                                "validation": {"required": True}
+                            },
+                            {
+                                "type": "textarea",
+                                "name": "data_structures",
+                                "label": "Data Structures",
+                                "placeholder": "Describe the data structures needed (e.g., user schema, prompt schema, rating schema)",
+                                "validation": {"required": True}
+                            },
+                            {
+                                "type": "textarea",
+                                "name": "api_endpoints",
+                                "label": "API Endpoints",
+                                "placeholder": "List any required API endpoints (e.g., GET /prompts, POST /prompts, PUT /prompts/{id})",
+                                "validation": {"required": False}
+                            }
+                        ]
+                    }
+                ]
+            }
             return CollectRequirementsOutput(questionnaire_form=questionnaire_form)
         last_phase = input_data.history[-1]
         questionnaire_form = await _generate_phase2_form(input_data.message, last_phase.answers)

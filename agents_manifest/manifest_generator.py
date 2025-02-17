@@ -5,23 +5,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from jinja2 import Environment, FileSystemLoader, Template
 from pathlib import Path
-import re
 import sys
 import inspect 
 from loguru import logger
 from agents_manifest.base_types import (
-    Capability, ActionType, WorkflowStepType, AgentConfig,
+    Capability, ActionType, WorkflowStepType, AgentConfig, slugify,
     Workflow, WorkflowStep, WorkflowTransition, WorkflowDataMapping
 )
 from agents_manifest.action_manager import ActionRegistry, agent_action, get_action_registry, ActionEndpointInfo
 from agents_manifest.workflow_manager import WorkflowRegistry, configure_workflow_routes, workflow_step, get_workflow_registry
 
-def slugify(text: str) -> str:
-    """Convert text to URL-safe slug."""
-    text = text.lower()
-    text = re.sub(r'[^\w\s-]', '', text)
-    text = re.sub(r'[-\s]+', '-', text)
-    return text.strip('-')
 
 class AgentManager:
     def __init__(self, base_url: str):
@@ -42,6 +35,7 @@ class AgentManager:
                 capabilities=agent.capabilities,
                 workflows=agent.workflows
             )
+        setup_agent_routes(app)
 
 class AgentRegistry:
     """Registry for agents and their capabilities."""
@@ -279,7 +273,7 @@ def configure_agent(
     # Get registries
     action_registry = get_action_registry(name)
     registry.action_registry = action_registry
-    workflow_registry = get_workflow_registry() if workflows else None
+    workflow_registry = get_workflow_registry(name) if workflows else None
     configure_agent_routes(app, agent_slug, action_registry, workflow_registry)
     if workflow_registry and workflows:
         for workflow in workflows:

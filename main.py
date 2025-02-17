@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from agents_manifest.base_types import Capability
-from agents_manifest.manifest_generator import AgentManager, setup_agent_routes, configure_agent_routes, configure_agent
+from agents_manifest.manifest_generator import AgentManager, configure_agent_routes, configure_agent
 
 # Import agent functions first to ensure decorators run
 from agents.flight_agent import flight_agent_app
@@ -25,7 +25,6 @@ def create_app():
     agent_manager.add_agent(code_agent_v1_app)
     agent_manager.add_agent(code_agent_v2_app)
     agent_manager.setup_agents(app)
-    setup_agent_routes(app)
     return app
 
 app = create_app()

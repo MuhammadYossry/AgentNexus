@@ -6,11 +6,12 @@ from loguru import logger
 from dataclasses import dataclass
 from pathlib import Path
 import inspect
-from agents_manifest.base_types import WorkflowStepType, BaseMetadata, Workflow, WorkflowStepMetadata, WorkflowStep
+from agents_manifest.base_types import (
+    WorkflowStepType, BaseMetadata, AgentConfig,
+    Workflow, WorkflowStepMetadata, WorkflowStep,
+    slugify
+)
 from agents_manifest.session_manager import SessionManager
-
-# Global registry
-_global_workflow_registry = None
 
 class WorkflowRegistry:
     """Enhanced registry for workflow definitions and handlers."""
@@ -91,14 +92,18 @@ class WorkflowRegistry:
         logger.warning(f"Step handler not found: {workflow_id}/{step_id}")
         return None
 
-def get_workflow_registry() -> WorkflowRegistry:
-    """Get or create global workflow registry."""
-    global _global_workflow_registry
-    if _global_workflow_registry is None:
-        _global_workflow_registry = WorkflowRegistry()
-    return _global_workflow_registry
+
+agent_workflow_registries: Dict[str, WorkflowRegistry] = {}
+
+def get_workflow_registry(agent_name: str) -> WorkflowRegistry:
+    """Get or create workflow registry for an agent."""
+    agent_slug = slugify(agent_name)
+    if agent_slug not in agent_workflow_registries:
+        agent_workflow_registries[agent_slug] = WorkflowRegistry()
+    return agent_workflow_registries[agent_slug]
 
 def workflow_step(
+    agent_config: AgentConfig,
     workflow_id: str,
     step_id: str,
     action_type: str,
@@ -122,7 +127,7 @@ def workflow_step(
             )
             
             # Register with global registry
-            registry = get_workflow_registry()
+            registry = get_workflow_registry(agent_config.name)
             registry.register_step_handler(workflow_id, step_id, func, metadata)
             
             # Store metadata on function for backward compatibility

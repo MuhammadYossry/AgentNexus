@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Type, List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
+import re
 from pydantic import BaseModel, Field
 
 class ActionType(str, Enum):
@@ -88,3 +89,10 @@ class AgentConfig:
     def __post_init__(self):
         if not self.base_path:
             self.base_path = f"/v1/{self.name.lower().replace(' ', '-')}"
+
+def slugify(text: str) -> str:
+    """Convert text to URL-safe slug."""
+    text = text.lower()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '-', text)
+    return text.strip('-')
