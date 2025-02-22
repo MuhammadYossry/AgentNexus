@@ -4,9 +4,10 @@ from typing import List, Optional, Dict, Any, Literal
 import datetime
 from enum import Enum
 
-from agents_manifest.base_types import ActionType, Capability, AgentConfig
+from agents_manifest.base_types import ActionType, Capability, AgentConfig, UIResponse, UIComponentUpdate
 from agents_manifest.action_manager import agent_action
 from agents_manifest.manifest_generator import configure_agent
+from agents_manifest.ui_components import FormComponent, FormField, TableComponent, TableColumn
 from agents.llm_client import create_llm_client
 
 class SeatClass(str, Enum):
@@ -98,6 +99,15 @@ class TravelPlanResponse(BaseModel):
     weather_notes: Optional[str]
     local_tips: List[str]
     emergency_contacts: Dict[str, str]
+
+class SeatSelectionInput(BaseModel):
+    """Input for seat selection interface."""
+    flight_number: str
+    passenger_count: int = Field(default=1, ge=1, le=9)
+
+class SeatSelectionOutput(UIResponse):
+    """Output for seat selection interface with UI updates."""
+    pass
 
 
 # Define rich capabilities for the flight agent
@@ -373,3 +383,80 @@ async def plan_travel(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@agent_action(
+    agent_config=flight_agent_app,
+    action_type=ActionType.CUSTOM_UI,
+    name="Interactive Seat Selection",
+    description="Interactive interface for selecting seats on a flight",
+    ui_components=[
+        FormComponent(
+            key="flight_info",
+            title="Flight Information",
+            fields=[
+                FormField(
+                    name="flight_number",
+                    label="Flight Number",
+                    type="text",
+                    required=True
+                ),
+                FormField(
+                    name="class",
+                    label="Class",
+                    type="select",
+                    options=[
+                        {"value": "economy", "label": "Economy"},
+                        {"value": "business", "label": "Business"},
+                        {"value": "first", "label": "First Class"}
+                    ]
+                )
+            ],
+            submit_action="search_seats"
+        ),
+        TableComponent(
+            key="seats_table",
+            title="Available Seats",
+            columns=[
+                TableColumn(field="seat_number", header="Seat"),
+                TableColumn(field="class", header="Class"),
+                TableColumn(field="price", header="Price"),
+                TableColumn(field="available", header="Available")
+            ],
+            data=[],  # Initially empty
+            actions=["select_seat"]
+        )
+    ]
+)
+async def seat_selection_interface(input_data: SeatSelectionInput) -> SeatSelectionOutput:
+    """Handle the seat selection interface."""
+    # Simulate fetching seat data
+    sample_seats = [
+        {"seat_number": f"{row}{letter}",
+         "class": "Economy" if row > 3 else "Business",
+         "price": 150.00 if row > 3 else 450.00,
+         "available": True}
+        for row in range(1, 20)
+        for letter in ['A', 'B', 'C', 'D', 'E', 'F']
+    ]
+
+    return SeatSelectionOutput(
+        data={
+            "flight_number": input_data.flight_number,
+            "total_seats": len(sample_seats),
+            "available_seats": len([s for s in sample_seats if s["available"]])
+        },
+        ui_updates=[
+            UIComponentUpdate(
+                key="seats_table",
+                state={"data": sample_seats[:input_data.passenger_count * 10]}  # Show limited seats
+            ),
+            UIComponentUpdate(
+                key="flight_info",
+                state={
+                    "flight_number": input_data.flight_number,
+                    "readonly": True
+                }
+            )
+        ]
+    )

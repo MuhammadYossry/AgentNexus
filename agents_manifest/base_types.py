@@ -11,6 +11,7 @@ class ActionType(str, Enum):
     TALK = "talk"
     GENERATE = "generate"
     QUESTION = "question"
+    CUSTOM_UI = "custom_ui"
 
 class WorkflowStepType(str, Enum):
     START = "start"
@@ -63,6 +64,16 @@ class WorkflowState(BaseModel):
     data: Dict[str, Any]
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+
+# Response model for UI updates
+class UIComponentUpdate(BaseModel):
+    key: str
+    state: Dict[str, Any]
+    meta: Optional[Dict[str, Any]] = None
+
+class UIResponse(BaseModel):
+    data: Dict[str, Any]
+    ui_updates: List[UIComponentUpdate]
 
 @dataclass
 class WorkflowStepMetadata:

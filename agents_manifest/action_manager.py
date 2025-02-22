@@ -7,8 +7,10 @@ import re
 from loguru import logger
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass
-from agents_manifest.base_types import ActionType, BaseMetadata, AgentConfig, slugify
+from dataclasses import dataclass, field
+from jinja2 import Template
+from agents_manifest.base_types import ActionType, BaseMetadata, AgentConfig, slugify, UIComponentUpdate
+from agents_manifest.ui_components import UIComponentBase
 
 @dataclass
 class ActionMetadata:
@@ -19,6 +21,8 @@ class ActionMetadata:
     response_template_md: Optional[str] = None
     workflow_id: Optional[str] = None
     step_id: Optional[str] = None
+    allow_dynamic_ui: bool = False
+    ui_components: List[UIComponentBase] = field(default_factory=list)
 
 @dataclass
 class ActionEndpointInfo:
@@ -63,7 +67,9 @@ def agent_action(
     schema_definitions: Optional[Dict[str, Type[BaseModel]]] = None,
     examples: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     workflow_id: Optional[str] = None,
-    step_id: Optional[str] = None
+    step_id: Optional[str] = None,
+    ui_components: Optional[List[UIComponentBase]] = None,
+    allow_dynamic_ui: bool = False
 ) -> Callable:
     def decorator(func: Callable) -> Callable:
         logger.debug(f"Decorating function: {func.__name__}")
@@ -90,7 +96,9 @@ def agent_action(
                 description=description,
                 response_template_md=str(template_path) if template_path else None,
                 workflow_id=workflow_id,
-                step_id=step_id
+                step_id=step_id,
+                ui_components=ui_components or [],
+                allow_dynamic_ui=allow_dynamic_ui
             ),
             input_model=input_model,
             output_model=output_model,
@@ -111,16 +119,19 @@ def configure_action_routes(app: FastAPI, registry: ActionRegistry, agent_slug: 
         @app.post(route_path)
         async def handle_action(
             request_data: endpoint_info.input_model,
-            action_info: ActionEndpointInfo = endpoint_info
+            ei: ActionEndpointInfo = endpoint_info
         ):
             try:
-                result = await action_info.handler(request_data)
-                if action_info.metadata.response_template_md:
-                    template_path = Path(action_info.metadata.response_template_md)
+                result = await ei.handler(request_data)
+                if ei.metadata.action_type == ActionType.CUSTOM_UI:
+                    if isinstance(result, UIResponse):
+                        return result
+                    return UIResponse(data=result.dict(), ui_updates=[])
+                if ei.metadata.response_template_md:
+                    template_path = Path(ei.metadata.response_template_md)
                     if template_path.exists():
                         template_content = template_path.read_text()
-                        from jinja2 import Template
-                        rendered = Template(template_content).render(**result)
+                        rendered = Template(template_content).render(**result.dict())
                         return Response(content=rendered, media_type="text/markdown")
                 return result
             except Exception as e:

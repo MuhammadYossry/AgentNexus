@@ -111,6 +111,11 @@ class AgentRegistry:
             }
             if template_content:
                 action_data["responseTemplateMD"] = template_content
+            if hasattr(endpoint_info.metadata, 'ui_components') and endpoint_info.metadata.ui_components:
+                action_data["uiComponents"] = [
+                    comp.dict(exclude_none=True)
+                    for comp in endpoint_info.metadata.ui_components
+                ]
             actions.append(action_data)
         logger.debug(f"Generated {len(actions)} actions for manifest")
         workflows_data = []
