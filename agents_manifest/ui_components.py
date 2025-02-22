@@ -25,6 +25,23 @@ class TableComponent(UIComponentBase):
     pagination: bool = True
     page_size: int = 10
 
+class CodeEditorComponent(UIComponentBase):
+    """Monaco-based code editor component."""
+    type: Literal["code_editor"] = "code_editor"
+    language: str
+    content: str = ""
+    theme: Optional[str] = "vs-dark"
+    readonly: bool = False
+    height: str = "400px"
+    actions: List[str] = Field(default_factory=list)
+    options: Dict[str, Any] = Field(default_factory=dict)
+
+class MarkdownComponent(UIComponentBase):
+    """Markdown display component."""
+    type: Literal["markdown"] = "markdown"
+    content: str = ""
+    style: Dict[str, Any] = Field(default_factory=dict)
+
 class FormField(BaseModel):
     name: str
     label: str

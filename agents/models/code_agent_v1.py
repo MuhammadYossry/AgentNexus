@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from enum import Enum
 
+from agents_manifest.base_types import UIResponse
+
 class BaseModelCamel(BaseModel):
     """Base model that configures camelCase support."""
     model_config = ConfigDict(
@@ -159,4 +161,14 @@ class RequirementsPhase(BaseModel):
 class CollectRequirementsInput(BaseModel):
     message: str
     history: Optional[List[RequirementsPhase]] = None
+
+class CodeReviewInput(BaseModel):
+    """Input for code review interface."""
+    code: str
+    language: str = "python"
+    action: Optional[str] = None
+
+class CodeReviewOutput(UIResponse):
+    """Output for code review interface."""
+    pass
 

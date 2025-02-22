@@ -9,10 +9,12 @@ from agents.models.code_agent_v1 import (
     ChatInput, ChatOutput, GenerateCodeInput, GenerateCodeOutput,
     ImproveCodeInput, ImproveCodeOutput, TestCodeInput, TestCodeOutput,
     DeployPreviewInput, DeployPreviewOutput,
-    CollectRequirementsInput, CollectRequirementsOutput, RequirementsPhase
+    CollectRequirementsInput, CollectRequirementsOutput, RequirementsPhase,
+    CodeReviewInput, CodeReviewOutput
 )
-from agents_manifest.base_types import AgentConfig, Capability
+from agents_manifest.base_types import AgentConfig, Capability, UIComponentUpdate
 from agents_manifest.manifest_generator import configure_agent, agent_action, ActionType
+from agents_manifest.ui_components import CodeEditorComponent, MarkdownComponent
 from agents.llm_client import create_llm_client
 
 AGENT_TEMPLATE = Path(__file__).parent / "templates" / "agent.html"
@@ -692,3 +694,80 @@ async def collect_requirements(input_data: CollectRequirementsInput) -> CollectR
     except Exception as e:
         logger.error(f"Error in collect_requirements: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@agent_action(
+    agent_config=code_agent_v1_app,
+    action_type=ActionType.CUSTOM_UI,
+    name="Interactive Code Review",
+    description="Interactive interface for code review and analysis",
+    ui_components=[
+        CodeEditorComponent(
+            key="main_editor",
+            title="Source Code",
+            language="python",
+            actions=["analyze", "format"],
+            options={
+                "minimap": {"enabled": True},
+                "lineNumbers": "on",
+                "folding": True,
+                "formatOnPaste": True,
+            }
+        ),
+        MarkdownComponent(
+            key="analysis_output",
+            title="Analysis Results",
+            content="*Submit code for analysis*",
+            style={"padding": "1rem", "backgroundColor": "#f5f5f5"}
+        )
+    ]
+)
+async def code_review_interface(input_data: CodeReviewInput) -> CodeReviewOutput:
+    """Handle interactive code review interface."""
+    try:
+        # Demo analysis without LLM
+        sample_analysis = f"""
+## Code Analysis Results
+
+### Overview
+- Lines of code: {len(input_data.code.splitlines())}
+- Language: {input_data.language}
+
+### Key Findings
+✅ Clear function names
+⚠️ Missing type hints
+❌ Insufficient documentation
+
+### Suggestions
+1. Add type hints to function parameters
+2. Include docstrings for all functions
+3. Consider breaking down complex functions
+
+### Code Style
+- PEP 8 compliant: Yes
+- Complexity score: Medium
+        """
+
+        if input_data.action == "format":
+            formatted_code = black.format_str(input_data.code, mode=black.FileMode())
+        else:
+            formatted_code = input_data.code
+
+        return CodeReviewOutput(
+            data={
+                "analysis_complete": True,
+                "timestamp": datetime.now().isoformat()
+            },
+            ui_updates=[
+                UIComponentUpdate(
+                    key="main_editor",
+                    state={"content": formatted_code}
+                ),
+                UIComponentUpdate(
+                    key="analysis_output",
+                    state={"content": sample_analysis}
+                )
+            ]
+        )
+    except Exception as e:
+        logger.error(f"Error in code review interface: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
