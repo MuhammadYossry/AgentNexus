@@ -16,16 +16,47 @@ from agents_manifest.action_manager import ActionRegistry, agent_action, get_act
 from agents_manifest.workflow_manager import WorkflowRegistry, configure_workflow_routes, workflow_step, get_workflow_registry
 from agents_manifest.ui_components import UIComponentBase
 
-
 class AgentManager:
+    """Manages the lifecycle and configuration of multiple agents within a FastAPI application.
+
+    This class provides a centralized mechanism for adding, configuring,
+    and setting up agents with their associated routes and capabilities.
+    It simplifies the process of integrating multiple agents into a single
+    application by handling their initialization and route configuration.
+
+    Attributes:
+        base_url (str): The base URL where agent services are hosted
+        agents (List): Collection of agents to be configured
+
+    Example:
+        >>> manager = AgentManager(base_url="http://localhost:9200")
+        >>> manager.add_agent(flight_agent_app)
+        >>> manager.setup_agents(fastapi_app)
+    """
     def __init__(self, base_url: str):
+        """Initialize the AgentManager with a base URL for agent services.
+        Args:
+            base_url (str):  The base URL where agent services will be hosted
+        """
         self.base_url = base_url
         self.agents = []
 
     def add_agent(self, agent):
+        """Add an agent to the manager for later setup and configuration.
+
+        Args:
+            agent: The agent configuration to be added to the manager
+        """
         self.agents.append(agent)
 
     def setup_agents(self, app: FastAPI):
+        """Configure and set up all added agents in the provided FastAPI application.
+        This method iterates through all added agents, configuring their
+        routes, capabilities, and workflows, and then sets up global agent routes.
+
+        Args:
+            app (FastAPI): The FastAPI application instance to configure agents for
+        """
         for agent in self.agents:
             configure_agent(
                 app=app,
@@ -39,7 +70,33 @@ class AgentManager:
         setup_agent_routes(app)
 
 class AgentRegistry:
-    """Registry for agents and their capabilities."""
+    """Comprehensive registry for managing agent configurations, capabilities, and metadata.
+
+    This class provides a centralized mechanism for storing and generating
+    detailed manifests for agents, including their actions, workflows,
+    and associated metadata. It supports introspection and automatic
+    documentation generation for agent capabilities.
+
+    Attributes:
+        base_url (str): Base URL for the agent services
+        name (str): Name of the agent
+        slug (str): URL-friendly version of the agent name
+        version (str): Version of the agent
+        description (str): Detailed description of the agent
+        capabilities (List[Capability]): List of agent capabilities
+        workflows (List[Workflow]): List of defined agent workflows
+        action_registry (ActionRegistry): Registry for agent actions
+        workflow_registry (WorkflowRegistry): Registry for agent workflows
+    Example:
+        >>> registry = AgentRegistry(
+        ...     base_url="http://localhost:9200",
+        ...     name="Flight Assistant",
+        ...     version="1.0.0",
+        ...     description="Advanced flight booking agent",
+        ...     capabilities=[...],
+        ...     workflows=[...]
+        ... )
+    """
     def __init__(
         self, 
         base_url: str,
@@ -49,6 +106,15 @@ class AgentRegistry:
         capabilities: List[Capability],
         workflows: Optional[List[Workflow]] = None
     ):
+        """Initialize the AgentRegistry with comprehensive agent details.
+        Args:
+            base_url (str): Base URL for the agent services
+            name (str): Name of the agent
+            version (str): Version of the agent
+            description (str): Detailed description of the agent
+            capabilities (List[Capability]): List of agent capabilities
+            workflows (Optional[List[Workflow]], optional): List of agent workflows
+        """
         self.base_url = base_url.rstrip('/')
         self.name = name
         self.slug = slugify(name)
@@ -60,7 +126,15 @@ class AgentRegistry:
         self.workflow_registry = WorkflowRegistry()
 
     def _get_input_model(self, handler: Callable) -> Optional[Type[BaseModel]]:
-        """Extract input model from handler signature."""
+        """Extract the input model from a handler function's signature.
+        Attempts to find a Pydantic model used for input validation
+        by inspecting the function's parameter annotations.
+        Args:
+            handler (Callable): The function to extract the input model from
+
+        Returns:
+            Optional[Type[BaseModel]]: The input validation model if found
+        """
         sig = inspect.signature(handler)
         for param in sig.parameters.values():
             if hasattr(param.annotation, 'model_json_schema'):
@@ -68,14 +142,39 @@ class AgentRegistry:
         return None
 
     def _get_output_model(self, handler: Callable) -> Optional[Type[BaseModel]]:
-        """Extract output model from handler return annotation."""
+        """Extract the output model from a handler function's return annotation.
+        Attempts to find a Pydantic model used for output validation
+        by inspecting the function's return type annotation.
+
+        Args:
+            handler (Callable): The function to extract the output model from
+
+        Returns:
+            Optional[Type[BaseModel]]: The output validation model if found
+        """
         return_annotation = handler.__annotations__.get('return')
         if hasattr(return_annotation, '__origin__'):
             return return_annotation.__args__[0]
         return return_annotation if hasattr(return_annotation, 'model_json_schema') else None
 
     def generate_manifest(self) -> Dict[str, Any]:
-        """Generate complete agent manifest."""
+        """Generate a comprehensive manifest describing the agent's capabilities.
+
+        Creates a detailed JSON representation of the agent, including:
+        - Agent metadata (name, version, description)
+        - Capabilities
+        - Actions with input/output schemas
+        - Workflow definitions
+        - Endpoint information
+
+        Returns:
+            Dict[str, Any]: A comprehensive manifest describing the agent
+
+        Notes:
+            - Automatically generates schemas for actions and workflows
+            - Includes UI component information
+            - Supports dynamic template loading
+        """
         logger.debug(f"Generating manifest for agent: {self.name}")
         logger.debug(f"Action registry contents: {self.action_registry.actions}")
         actions = []

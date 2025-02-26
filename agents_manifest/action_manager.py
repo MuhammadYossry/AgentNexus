@@ -14,7 +14,7 @@ from agents_manifest.ui_components import UIComponentBase
 
 @dataclass
 class ActionMetadata:
-    """Metadata for action endpoints."""
+    """Metadata container for capturing comprehensive information about an agent action."""
     action_type: ActionType
     name: str
     description: str
@@ -26,7 +26,7 @@ class ActionMetadata:
 
 @dataclass
 class ActionEndpointInfo:
-    """Information about an action endpoint."""
+    """Aggregates all necessary details for registering and invoking an agent action."""
     metadata: ActionMetadata
     input_model: Type[BaseModel]
     output_model: Type[BaseModel]
@@ -36,23 +36,43 @@ class ActionEndpointInfo:
     route_path: Optional[str] = None
 
 class ActionRegistry:
-    """Registry for agent actions and their handlers."""
+    """Registry for managing and discovering agent actions across the system."""
     def __init__(self):
+        """Initialize an empty action registry."""
         self.actions: Dict[str, ActionEndpointInfo] = {}
 
     def register_action(self, action_slug: str, endpoint_info: ActionEndpointInfo):
-        """Register an action endpoint."""
+        """Register a new action in the registry.
+
+        Args:
+            action_slug (str): Unique identifier for the action
+            endpoint_info (ActionEndpointInfo): Comprehensive action details
+        """
         logger.debug(f"Registering action: {action_slug}")
         self.actions[action_slug] = endpoint_info
 
     def get_action(self, action_slug: str) -> Optional[ActionEndpointInfo]:
-        """Get action endpoint info by slug."""
+        """Retrieve an action's endpoint information.
+
+        Args:
+            action_slug (str): Unique identifier for the action
+
+        Returns:
+            Optional[ActionEndpointInfo]: Action details if found
+        """
         return self.actions.get(action_slug)
 
 agent_registries: Dict[str, ActionRegistry] = {}
 
 def get_action_registry(agent_name: str) -> ActionRegistry:
-    """Get or create action registry for an agent."""
+    """Retrieve or create an action registry for a specific agent.
+
+    Args:
+        agent_name (str): Name of the agent
+
+    Returns:
+        ActionRegistry: Registry for the specified agent
+    """
     agent_slug = slugify(agent_name)
     if agent_slug not in agent_registries:
         agent_registries[agent_slug] = ActionRegistry()
@@ -71,6 +91,17 @@ def agent_action(
     ui_components: Optional[List[UIComponentBase]] = None,
     allow_dynamic_ui: bool = False
 ) -> Callable:
+    """Decorator for registering agent actions with comprehensive metadata.
+
+    Args:
+        agent_config (AgentConfig): Configuration of the agent
+        action_type (ActionType): Type of action being defined
+        name (str): Human-readable name of the action
+        description (str): Detailed description of the action
+
+    Returns:
+        Callable: Decorated action handler
+    """
     def decorator(func: Callable) -> Callable:
         logger.debug(f"Decorating function: {func.__name__}")
         template_path = None
@@ -111,6 +142,13 @@ def agent_action(
     return decorator
 
 def configure_action_routes(app: FastAPI, registry: ActionRegistry, agent_slug: str):
+    """Configure API routes for all actions in an agent's registry.
+
+    Args:
+        app (FastAPI): The FastAPI application instance
+        registry (ActionRegistry): Registry of actions to configure
+        agent_slug (str): Unique identifier for the agent
+    """
     logger.debug(f"Configuring routes for {agent_slug}")
     for action_slug, endpoint_info in registry.actions.items():
         route_path = f"/agents/{agent_slug}/actions/{action_slug}"
