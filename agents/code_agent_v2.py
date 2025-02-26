@@ -127,7 +127,7 @@ async def handle_upload(data: Dict[str, Any]) -> WorkflowStepResponse:
 )
 async def handle_analysis(data: Dict[str, Any]) -> WorkflowStepResponse:
     """Analyze code and provide feedback."""
-    code = data["context"]["context"]["code"]
+    code = data["context"]["code"]
     analysis_md = f"""## Code Analysis Results
 ### Metrics
 - Lines of Code: {len(code.splitlines())}
