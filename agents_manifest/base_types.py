@@ -6,17 +6,14 @@ from datetime import datetime
 import re
 from pydantic import BaseModel, Field
 
+from agents_manifest.ui_components import UIComponentBase
+
 class ActionType(str, Enum):
     """Types of actions an agent can perform."""
     TALK = "talk"
     GENERATE = "generate"
     QUESTION = "question"
     CUSTOM_UI = "custom_ui"
-
-class WorkflowStepType(str, Enum):
-    START = "start"
-    ACTION = "action"
-    END = "end"
 
 class Capability(BaseModel):
     """Simplified capability definition."""
@@ -30,6 +27,22 @@ class BaseMetadata(BaseModel):
     response_template_md: Optional[str] = None
 
 # Models
+
+# Response model for UI updates
+class UIComponentUpdate(BaseModel):
+    key: str
+    state: Dict[str, Any]
+    meta: Optional[Dict[str, Any]] = None
+
+class UIResponse(BaseModel):
+    data: Dict[str, Any]
+    ui_updates: List[UIComponentUpdate]
+
+class WorkflowStepType(str, Enum):
+    START = "start"
+    UI_STEP = "ui_step"
+    END = "end"
+
 class WorkflowDataMapping(BaseModel):
     """Maps data between workflow steps."""
     source_field: str
@@ -65,15 +78,12 @@ class WorkflowState(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
-# Response model for UI updates
-class UIComponentUpdate(BaseModel):
-    key: str
-    state: Dict[str, Any]
-    meta: Optional[Dict[str, Any]] = None
-
-class UIResponse(BaseModel):
+class WorkflowStepResponse(BaseModel):
+    """Response structure for workflow steps with UI support."""
     data: Dict[str, Any]
-    ui_updates: List[UIComponentUpdate]
+    ui_updates: List[UIComponentUpdate] = []
+    next_step_id: Optional[str] = None  # Dynamic next step
+    context_updates: Dict[str, Any] = {}  # Updates to workflow context
 
 @dataclass
 class WorkflowStepMetadata:
@@ -83,7 +93,8 @@ class WorkflowStepMetadata:
     action_type: str
     name: str
     description: str
-    response_template_md: Optional[str] = None
+    ui_components: List[UIComponentBase] = field(default_factory=list)
+    allow_dynamic_ui: bool = True
     input_model: Optional[Type[BaseModel]] = None
     output_model: Optional[Type[BaseModel]] = None
 

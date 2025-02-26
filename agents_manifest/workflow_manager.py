@@ -1,6 +1,6 @@
 from typing import Dict, Callable, Optional, List, Tuple, Any, Type
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Path as FastAPIPath
 from functools import wraps
 from loguru import logger
 from dataclasses import dataclass
@@ -11,6 +11,7 @@ from agents_manifest.base_types import (
     Workflow, WorkflowStepMetadata, WorkflowStep,
     slugify
 )
+from agents_manifest.ui_components import UIComponentBase
 from agents_manifest.session_manager import SessionManager
 
 class WorkflowRegistry:
@@ -38,7 +39,7 @@ class WorkflowRegistry:
         workflow_id: str, 
         step_id: str, 
         handler: Callable,
-        metadata: WorkflowStepMetadata
+        metadata: Dict[str, Any]
     ):
         """Register a handler function and its metadata for a workflow step."""
         try:
@@ -105,47 +106,42 @@ def get_workflow_registry(agent_name: str) -> WorkflowRegistry:
 def workflow_step(
     agent_config: AgentConfig,
     workflow_id: str,
-    step_id: str,
     action_type: str,
+    step_id: str,
     name: str,
     description: str,
-    response_template_md: Optional[str] = None
-):
-    """Enhanced decorator to register workflow step handlers."""
+    ui_components: Optional[List[UIComponentBase]] = None,
+    allow_dynamic_ui: bool = True
+) -> Callable:
+    """decorator for UI-driven workflow steps."""
     def decorator(func: Callable) -> Callable:
         try:
-            logger.debug(f"Registering workflow step handler: {workflow_id}/{step_id}")
-            
-            # Create metadata
             metadata = WorkflowStepMetadata(
                 workflow_id=workflow_id,
-                step_id=step_id,
                 action_type=action_type,
+                step_id=step_id,
                 name=name,
                 description=description,
-                response_template_md=response_template_md
+                ui_components=ui_components or [],
+                allow_dynamic_ui=allow_dynamic_ui
             )
-            
-            # Register with global registry
             registry = get_workflow_registry(agent_config.name)
             registry.register_step_handler(workflow_id, step_id, func, metadata)
-            
-            # Store metadata on function for backward compatibility
             @wraps(func)
             async def wrapper(*args, **kwargs):
                 try:
-                    return await func(*args, **kwargs)
+                    result = await func(*args, **kwargs)
+                    if not isinstance(result, WorkflowStepResponse):
+                        # Auto-wrap non-WorkflowStepResponse results
+                        return WorkflowStepResponse(data=result)
+                    return result
                 except Exception as e:
                     logger.error(f"Error in workflow step {workflow_id}/{step_id}: {str(e)}")
                     raise
-            
-            wrapper._workflow_metadata = metadata
             return wrapper
-            
         except Exception as e:
             logger.error(f"Error setting up workflow step {workflow_id}/{step_id}: {str(e)}")
             raise
-            
     return decorator
 
 def handle_transitions(result: Any, step: WorkflowStep) -> Dict[str, Any]:
@@ -180,93 +176,113 @@ def configure_workflow_routes(app: FastAPI, registry: WorkflowRegistry, agent_sl
     logger.debug(f"Configuring workflow routes for agent: {agent_slug}")
 
     for workflow in registry.workflows.values():
-        logger.debug(f"Setting up routes for workflow: {workflow.id}")
+        workflow_id = workflow.id
+        logger.debug(f"Setting up routes for workflow: {workflow_id}")
         
         # Workflow start route
-        path = f"/agents/{agent_slug}/workflow/{workflow.id}/start"
+        path = f"/agents/{agent_slug}/workflow/{workflow_id}/start"
         logger.debug(f"Registering workflow start path: {path}")
 
-        @app.post(path, description=f"Start the {workflow.name} workflow")
+        @app.post(f"/agents/{agent_slug}/workflow/{{workflow_id}}/start", description=f"Start the {workflow.name} workflow")
         async def start_workflow(
-            data: Dict[str, Any],
-            current_workflow: Workflow = workflow
+            # workflow_id: str = FastAPIPath(..., description="ID of the workflow to start"),
+            data: Dict[str, Any] = None
         ):
             try:
-                logger.debug(f"Starting workflow {current_workflow.id} with data: {data}")
-                step_info = registry.get_step_handler(current_workflow.id, current_workflow.initial_step)
-                
-                if not step_info:
-                    msg = f"Initial step handler not found for workflow {current_workflow.id}"
-                    logger.error(msg)
-                    raise HTTPException(404, msg)
+                if data is None:
+                    data = {}
+                workflow = registry.get_workflow(workflow_id)
+                if not workflow:
+                    raise HTTPException(404, "Workflow not found")
                 
                 session_id = session_manager.create_session()
-                handler, metadata = step_info
-                
-                # Update session
-                session_manager.update_session(session_id, {
-                    "workflow_id": current_workflow.id,
-                    "current_step": current_workflow.initial_step,
+                session = {
+                    "workflow_id": workflow_id,
+                    "current_step": workflow.initial_step,
                     "context": data.get("context", {})
-                })
+                }
                 
-                # Execute handler
-                result = await handler(data)
+                handler_info = registry.get_step_handler(workflow_id, workflow.initial_step)
+                if not handler_info:
+                    raise HTTPException(404, "Initial step handler not found")
                 
-                # Process result
-                initial_step = next(s for s in current_workflow.steps if s.id == current_workflow.initial_step)
-                step_result = handle_transitions(result, initial_step)
-                step_result["session_id"] = session_id
+                handler, metadata = handler_info
+                response = await handler(data)
                 
-                logger.info(f"Successfully started workflow {current_workflow.id}")
-                return step_result
+                # Update session with context and UI state
+                session["context"].update(response.context_updates)
+                session_manager.update_session(session_id, session)
                 
+                return {
+                    "session_id": session_id,
+                    "metadata": {
+                        "name": metadata.name,
+                        "description": metadata.description,
+                        "ui_components": [comp.dict() for comp in metadata.ui_components]
+                    },
+                    "data": response.data,
+                    "ui_updates": response.ui_updates,
+                    "next_step": response.next_step_id
+                }
             except Exception as e:
                 logger.error(f"Error starting workflow: {str(e)}")
                 raise HTTPException(status_code=500, detail=str(e))
 
         # Step execution route
-        step_path = f"/agents/{agent_slug}/workflow/{workflow.id}/steps/{{step_id}}"
+        step_path = f"/agents/{agent_slug}/workflow/{workflow_id}/step/{{step_id}}"
         logger.debug(f"Registering workflow step path: {step_path}")
 
-        @app.post(step_path, description=f"Execute a step in the {workflow.name} workflow")
+        @app.post(f"/agents/{agent_slug}/workflow/{{workflow_id}}/step/{{step_id}}")
         async def execute_step(
+            workflow_id: str,
             step_id: str,
             data: Dict[str, Any],
-            current_workflow: Workflow = workflow
         ):
             try:
-                logger.debug(f"Executing step {step_id} with data: {data}")
-                
-                # Validate session
                 session_id = data.get("session_id")
+                if not session_id:
+                    raise HTTPException(400, "session_id required in request body")
                 session = session_manager.get_session(session_id)
                 if not session:
-                    raise HTTPException(404, "Session not found or expired")
+                    raise HTTPException(404, "Session expired or invalid")
                 
-                # Get step and handler
-                step = next((s for s in current_workflow.steps if s.id == step_id), None)
-                if not step:
-                    raise HTTPException(404, f"Step {step_id} not found in workflow")
+                handler_info = registry.get_step_handler(workflow_id, step_id)
+                if not handler_info:
+                    raise HTTPException(404, "Step handler not found")
                 
-                step_info = registry.get_step_handler(current_workflow.id, step_id)
-                if not step_info:
-                    raise HTTPException(404, f"Handler not found for step {step_id}")
+                handler, metadata = handler_info
+                response = await handler({**data, "context": session["context"]})
                 
-                # Update session and execute
-                handler, metadata = step_info
-                session["current_step"] = step_id
-                session_manager.update_session(session_id, session)
+                # Update session context
+                session["context"].update(response.context_updates)
                 
-                result = await handler(data)
-                
-                # Handle completion
-                if step.type == WorkflowStepType.END:
-                    session_manager.close_session(session_id)
+                # Handle navigation
+                if response.next_step_id:
+                    session["current_step"] = response.next_step_id
+                    next_handler_info = registry.get_step_handler(workflow_id, response.next_step_id)
+                    if not next_handler_info:
+                        raise HTTPException(404, "Next step handler not found")
+                    next_metadata = next_handler_info[1]
                     
-                logger.info(f"Successfully executed step {step_id}")
-                return handle_transitions(result, step)
+                    # Include next step's UI components
+                    return {
+                        "session_id": session_id,
+                        "metadata": {
+                            "name": next_metadata.name,
+                            "description": next_metadata.description,
+                            "ui_components": [comp.dict() for comp in next_metadata.ui_components]
+                        },
+                        "data": response.data,
+                        "ui_updates": response.ui_updates,
+                        "next_step": response.next_step_id
+                    }
                 
+                session_manager.update_session(session_id, session)
+                return {
+                    "session_id": session_id,
+                    "data": response.data,
+                    "ui_updates": response.ui_updates
+                }
             except Exception as e:
-                logger.error(f"Error executing workflow step: {str(e)}")
+                logger.error(f"Error executing step: {str(e)}")
                 raise HTTPException(status_code=500, detail=str(e))

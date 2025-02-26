@@ -14,6 +14,7 @@ from agents_manifest.base_types import (
 )
 from agents_manifest.action_manager import ActionRegistry, agent_action, get_action_registry, ActionEndpointInfo
 from agents_manifest.workflow_manager import WorkflowRegistry, configure_workflow_routes, workflow_step, get_workflow_registry
+from agents_manifest.ui_components import UIComponentBase
 
 
 class AgentManager:
@@ -122,11 +123,11 @@ class AgentRegistry:
         for workflow in self.workflows:
             workflow_data = workflow.model_dump()
             workflow_data["endpoints"] = {}
-            # Get workflow handlers and metadata
+            # Get workflow handlers and step_metadata
             for step in workflow.steps:
                 step_handler = self.workflow_registry.get_step_handler(workflow.id, step.id)
                 if step_handler:
-                    handler, metadata = step_handler
+                    handler, step_metadata = step_handler
                     if step.id == workflow.initial_step:
                         # Extract schemas from decorated function signature
                         input_model = self._get_input_model(handler)
@@ -138,6 +139,11 @@ class AgentRegistry:
                             "output_schema": output_model.model_json_schema() if output_model else {},
                             "description": f"Start the {workflow.name} workflow"
                         }
+                        if hasattr(step_metadata, 'ui_components') and step_metadata.ui_components:
+                            workflow_data["endpoints"]["start"]["uiComponents"] = [
+                                comp.dict(exclude_none=True)
+                                for comp in step_metadata.ui_components
+                            ]
                     else:
                         input_model = self._get_input_model(handler)
                         output_model = self._get_output_model(handler)
@@ -146,8 +152,13 @@ class AgentRegistry:
                             "method": "POST",
                             "input_schema": input_model.model_json_schema() if input_model else {},
                             "output_schema": output_model.model_json_schema() if output_model else {},
-                            "description": metadata.description
+                            "description": step_metadata.description
                         }
+                        if hasattr(step_metadata, 'ui_components') and step_metadata.ui_components:
+                            workflow_data["endpoints"][f"step_{step.id}"]["uiComponents"] = [
+                                comp.dict(exclude_none=True)
+                                for comp in step_metadata.ui_components
+                            ]
             workflows_data.append(workflow_data)
 
         return {
