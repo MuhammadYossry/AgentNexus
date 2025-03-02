@@ -4,13 +4,15 @@ from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Response
 import inspect
 import re
+from functools import wraps
 from loguru import logger
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
 from jinja2 import Template
-from agents_manifest.base_types import ActionType, BaseMetadata, AgentConfig, slugify, UIComponentUpdate
+from agents_manifest.base_types import ActionType, BaseMetadata, AgentConfig, slugify, UIComponentUpdate, UIResponse
 from agents_manifest.ui_components import UIComponentBase
+from agents_manifest.ui_events_dispatcher import ComponentEventDispatcher
 
 @dataclass
 class ActionMetadata:
@@ -63,6 +65,7 @@ class ActionRegistry:
         return self.actions.get(action_slug)
 
 agent_registries: Dict[str, ActionRegistry] = {}
+global_dispatcher = ComponentEventDispatcher()
 
 def get_action_registry(agent_name: str) -> ActionRegistry:
     """Retrieve or create an action registry for a specific agent.
@@ -120,6 +123,77 @@ def agent_action(
             else func.__annotations__.get('return')
         )
         action_slug = slugify(name)
+        # Register UI components with global dispatcher
+        if ui_components:
+            for component in ui_components:
+                # Register component and its handlers with the global dispatcher
+                global_dispatcher.register_component_handlers(component)
+                # Additional registration for action handlers
+                if hasattr(component, 'action_handlers') and component.action_handlers:
+                    for action, handler in component.action_handlers.handlers.items():
+                        global_dispatcher.register_action_handler(
+                            component_key=component.key,
+                            action=action,
+                            handler=handler
+                        )
+                    # Register default handler if present
+                    if component.action_handlers.default_handler:
+                        global_dispatcher.register_action_handler(
+                            component_key=component.key,
+                            action='__default__',
+                            handler=component.action_handlers.default_handler
+                        )
+        # Wrap the original function to handle UI components and event dispatching
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                # Get input data
+                print("DEBUGGING: Wrapper function entered")
+                input_data = args[0] if args else next(iter(kwargs.values()), None)
+                logger.debug(f"Input data received: {input_data}")
+                # Register UI components with global dispatcher
+                if ui_components:
+                    for component in ui_components:
+                        global_dispatcher.register_component_handlers(component)
+                        logger.debug(f"Registered handlers for component: {component.key}")
+                # Check for action dispatching if input has an action
+                if hasattr(input_data, 'action') and input_data.action:
+                    # Find the target component key
+                    target_component_key = getattr(input_data, 'component_key', 'main_editor')
+                    # Prepare data for dispatching
+                    data_dict = input_data.dict() if hasattr(input_data, 'dict') else {}
+                    try:
+                        # Dispatch action through global dispatcher
+                        result = await global_dispatcher.dispatch_action(
+                            component_key=target_component_key,
+                            action=input_data.action,
+                            data=data_dict
+                        )
+                        logger.debug(f"Dispatch result: {result}")
+                        # Convert to UIResponse if needed
+                        if result and not isinstance(result, UIResponse):
+                            result = UIResponse(
+                                data=result.dict() if hasattr(result, 'dict') else result,
+                                ui_updates=[]
+                            )
+                        return result
+                    except EventDispatchError:
+                        # Fall back to original function if dispatch fails
+                        logger.warning(f"Event dispatch failed for action {input_data.action}")
+                # Call original function if no action handling occurred
+                result = await func(*args, **kwargs)
+                # Handle response template if exists
+                if template_path and template_path.exists():
+                    template_content = template_path.read_text()
+                    rendered = Template(template_content).render(
+                        **result.dict() if hasattr(result, 'dict') else {}
+                    )
+                    return Response(content=rendered, media_type="text/markdown")
+                return result
+            except Exception as e:
+                logger.error(f"Error in action handler: {str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
+
         endpoint_info = ActionEndpointInfo(
             metadata=ActionMetadata(
                 action_type=action_type,
@@ -138,6 +212,7 @@ def agent_action(
             examples=examples
         )
         get_action_registry(agent_config.name).register_action(action_slug, endpoint_info)
+        wrapper.ui_components = ui_components
         return func
     return decorator
 

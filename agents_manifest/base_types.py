@@ -160,7 +160,7 @@ class WorkflowStep(BaseModel):
             from this step
     """
     id: str
-    type: WorkflowStepType
+    type: Optional[WorkflowStepType] = WorkflowStepType.UI_STEP
     action: Optional[str] = None
     transitions: List[WorkflowTransition] = Field(default_factory=list)
 

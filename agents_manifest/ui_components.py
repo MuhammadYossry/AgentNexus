@@ -1,7 +1,17 @@
 # base_types.py additions
 
-from typing import Union, List, Dict, Any, Literal, Optional
-from pydantic import BaseModel, Field
+from typing import Union, List, Dict, Any, Literal, Optional, Callable, ClassVar
+from pydantic import BaseModel, Field, model_validator, validator
+from inspect import signature, Parameter
+import logging
+
+logger = logging.getLogger(__name__)
+
+class EventHandlerMetadata:
+    """Metadata for tracking event handler information."""
+    def __init__(self, func: Callable, event_type: str):
+        self.func = func
+        self.event_type = event_type
 
 class UIComponentBase(BaseModel):
     """Base class for creating dynamic, configurable user interface components.
@@ -22,6 +32,67 @@ class UIComponentBase(BaseModel):
     title: Optional[str] = None
     meta: Dict[str, Any] = Field(default_factory=dict)
     state: Dict[str, Any] = Field(default_factory=dict)
+    # Internal handler storage - not included in serialization
+    event_handlers: Dict[str, Callable] = Field(default_factory=dict, exclude=True)
+    # Class-level valid events (to be overridden by subclasses)
+    valid_events: ClassVar[List[str]] = []
+
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "validate_assignment": True
+    }
+
+    def register_handler(self, event_type: str, handler: Callable) -> None:
+        """Register a handler for a specific event type.
+        Args:
+            event_type: The type of event to handle
+            handler: The function to handle the event
+        Raises:
+            ValueError: If the event type is not valid for this component
+        """
+        if event_type not in self.valid_events:
+            raise ValueError(
+                f"Invalid event type '{event_type}' for {self.type} component. "
+                f"Valid events are: {', '.join(self.valid_events)}"
+            )
+        self.event_handlers[event_type] = handler
+        logger.debug(f"Registered {event_type} handler for {self.key}")
+
+    def get_handler(self, event_type: str) -> Optional[Callable]:
+        """Retrieve a handler for a specific event type.
+        Args:
+            event_type: The type of event to get handler for
+        Returns:
+            The handler function or None if not found
+        """
+        return self.event_handlers.get(event_type)
+
+    @validator('event_handlers', pre=True, always=True)
+    def _collect_event_handlers(cls, v, values):
+        """Collect event handlers defined as class attributes."""
+        handlers = v or {}
+        # Collect handlers from class attributes
+        for key, value in values.items():
+            if key.startswith('on_') and callable(value):
+                event_type = key[3:]  # Remove 'on_' prefix
+                if event_type in cls.valid_events:
+                    handlers[event_type] = value
+        
+        return handlers
+
+class ActionHandlerMap(BaseModel):
+    """Maps action names to handler functions for components with dynamic actions."""
+    handlers: Dict[str, Callable] = Field(default_factory=dict)
+    default_handler: Optional[Callable] = None
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+    def get_handler(self, action: str) -> Optional[Callable]:
+        """Get the appropriate handler for an action."""
+        return self.handlers.get(action, self.default_handler)
+    def register_handler(self, action: str, handler: Callable) -> None:
+        """Add a handler for a specific action."""
+        self.handlers[action] = handler
 
 class TableColumn(BaseModel):
     """Defines the configuration for a single column in a table component.
@@ -83,8 +154,21 @@ class TableComponent(UIComponentBase):
     columns: List[TableColumn]
     data: List[Dict[str, Any]]
     actions: List[str] = Field(default_factory=list)
+    action_handlers: Optional[ActionHandlerMap] = None
     pagination: bool = True
     page_size: int = 10
+    # Event handlers
+    valid_events: ClassVar[List[str]] = ["row_action", "sort", "pagination"]
+    # Optional action-specific handlers
+    on_row_action: Optional[Callable] = None
+    on_sort: Optional[Callable] = None
+    on_pagination: Optional[Callable] = None
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Ensure action_handlers exists
+        if self.action_handlers is None and 'action_handlers' in data:
+            self.action_handlers = data['action_handlers']
+
 
 class CodeEditorComponent(UIComponentBase):
     """Monaco-based code editor component with extensive customization options.
@@ -101,6 +185,9 @@ class CodeEditorComponent(UIComponentBase):
         height (str, optional): Height of the editor. Defaults to "400px"
         actions (List[str], optional): Available editor actions
         options (Dict[str, Any], optional): Additional Monaco editor options
+        on_change (Optional[Callable]): Handler for content change events
+        on_format (Optional[Callable]): Handler for code formatting requests
+        on_lint (Optional[Callable]): Handler for linting requests
 
     Example:
         >>> code_editor = CodeEditorComponent(
@@ -123,7 +210,15 @@ class CodeEditorComponent(UIComponentBase):
     readonly: bool = False
     height: str = "400px"
     actions: List[str] = Field(default_factory=list)
+    action_handlers: Optional[ActionHandlerMap] = Field(default=None, exclude=True)
     options: Dict[str, Any] = Field(default_factory=dict)
+    # Event handlers
+    valid_events: ClassVar[List[str]] = ["content_change", "save", "format", "lint"]
+    on_content_change: Optional[Callable] = None
+    on_save: Optional[Callable] = None
+    on_format: Optional[Callable] = None
+    on_lint: Optional[Callable] = None
+
 
 class MarkdownComponent(UIComponentBase):
     """Markdown rendering component for displaying formatted text.
@@ -149,6 +244,8 @@ class MarkdownComponent(UIComponentBase):
     type: Literal["markdown"] = "markdown"
     content: str = ""
     style: Dict[str, Any] = Field(default_factory=dict)
+    # No events for markdown component
+    valid_events: ClassVar[List[str]] = []
 
 class FormField(BaseModel):
     """Defines a single field configuration for form-based UI components.
@@ -184,9 +281,10 @@ class FormField(BaseModel):
     name: str
     label: str
     type: Literal["text", "number", "date", "select"]
-    required: bool = True
+    required: bool = False
     placeholder: Optional[str] = None
     options: Optional[List[Dict[str, str]]] = None
+    validation: Optional[Dict[str, Any]] = None
 
 class FormComponent(UIComponentBase):
     """Represents a form-based UI component with dynamic field configuration.
@@ -222,3 +320,7 @@ class FormComponent(UIComponentBase):
     type: Literal["form"] = "form"
     fields: List[FormField]
     submit_action: str
+    valid_events: ClassVar[List[str]] = ["submit", "field_change", "validation"]
+    on_submit: Optional[Callable] = None
+    on_field_change: Optional[Callable] = None
+    on_validation: Optional[Callable] = None

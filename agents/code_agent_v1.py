@@ -12,9 +12,10 @@ from agents.models.code_agent_v1 import (
     CollectRequirementsInput, CollectRequirementsOutput, RequirementsPhase,
     CodeReviewInput, CodeReviewOutput
 )
-from agents_manifest.base_types import AgentConfig, Capability, UIComponentUpdate
-from agents_manifest.manifest_generator import configure_agent, agent_action, ActionType
-from agents_manifest.ui_components import CodeEditorComponent, MarkdownComponent
+from agents_manifest.base_types import AgentConfig, Capability, UIComponentUpdate, UIResponse
+from agents_manifest.manifest_generator import configure_agent, ActionType
+from agents_manifest.action_manager import agent_action
+from agents_manifest.ui_components import CodeEditorComponent, MarkdownComponent, ActionHandlerMap
 from agents.llm_client import create_llm_client
 
 AGENT_TEMPLATE = Path(__file__).parent / "templates" / "agent.html"
@@ -695,42 +696,17 @@ async def collect_requirements(input_data: CollectRequirementsInput) -> CollectR
         logger.error(f"Error in collect_requirements: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@agent_action(
-    agent_config=code_agent_v1_app,
-    action_type=ActionType.CUSTOM_UI,
-    name="Interactive Code Review",
-    description="Interactive interface for code review and analysis",
-    ui_components=[
-        CodeEditorComponent(
-            key="main_editor",
-            title="Source Code",
-            language="python",
-            actions=["analyze", "format"],
-            options={
-                "minimap": {"enabled": True},
-                "lineNumbers": "on",
-                "folding": True,
-                "formatOnPaste": True,
-            }
-        ),
-        MarkdownComponent(
-            key="analysis_output",
-            title="Analysis Results",
-            content="*Submit code for analysis*",
-            style={"padding": "1rem", "backgroundColor": "#f5f5f5"}
-        )
-    ]
-)
-async def code_review_interface(input_data: CodeReviewInput) -> CodeReviewOutput:
-    """Handle interactive code review interface."""
+
+# Define standalone handlers for better modularity
+async def handle_code_analyze(code: str, language: str = "python", **kwargs) -> UIResponse:
+    """Handler for code analysis action."""
     try:
-        # Demo analysis without LLM
         sample_analysis = f"""
 ## Code Analysis Results
 
 ### Overview
-- Lines of code: {len(input_data.code.splitlines())}
-- Language: {input_data.language}
+- Lines of code: {len(code.splitlines())}
+- Language: {language}
 
 ### Key Findings
 ✅ Clear function names
@@ -747,14 +723,41 @@ async def code_review_interface(input_data: CodeReviewInput) -> CodeReviewOutput
 - Complexity score: Medium
         """
 
-        if input_data.action == "format":
-            formatted_code = black.format_str(input_data.code, mode=black.FileMode())
-        else:
-            formatted_code = input_data.code
-
-        return CodeReviewOutput(
+        return UIResponse(
             data={
                 "analysis_complete": True,
+                "timestamp": datetime.now().isoformat()
+            },
+            ui_updates=[
+                UIComponentUpdate(
+                    key="analysis_output",
+                    state={"content": sample_analysis}
+                )
+            ]
+        )
+    except Exception as e:
+        logger.error(f"Error in code analysis: {str(e)}")
+        return UIResponse(
+            data={"error": str(e)},
+            ui_updates=[
+                UIComponentUpdate(
+                    key="analysis_output",
+                    state={"content": f"## Error\n\n{str(e)}"}
+                )
+            ]
+        )
+
+async def handle_code_format(code: str, language: str = "python", **kwargs) -> UIResponse:
+    """Handler for code formatting action."""
+    try:
+        # Format code using black if it's Python
+        if language.lower() == "python":
+            formatted_code = black.format_str(code, mode=black.FileMode())
+        else:
+            formatted_code = code
+        return UIResponse(
+            data={
+                "format_complete": True,
                 "timestamp": datetime.now().isoformat()
             },
             ui_updates=[
@@ -764,10 +767,63 @@ async def code_review_interface(input_data: CodeReviewInput) -> CodeReviewOutput
                 ),
                 UIComponentUpdate(
                     key="analysis_output",
-                    state={"content": sample_analysis}
+                    state={"content": "## Formatting Complete\n\nCode has been formatted."}
                 )
             ]
         )
     except Exception as e:
-        logger.error(f"Error in code review interface: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in code formatting: {str(e)}")
+        return UIResponse(
+            data={"error": str(e)},
+            ui_updates=[
+                UIComponentUpdate(
+                    key="analysis_output",
+                    state={"content": f"## Error\n\n{str(e)}"}
+                )
+            ]
+        )
+
+@agent_action(
+    agent_config=code_agent_v1_app,
+    action_type=ActionType.CUSTOM_UI,
+    name="Interactive Code Review",
+    description="Interactive interface for code review and analysis",
+    ui_components=[
+        CodeEditorComponent(
+            key="main_editor",
+            title="Source Code",
+            language="python",
+            content="# Enter your Python code here\n\ndef example_function():\n    print('Hello, world!')",
+            actions=["analyze", "format"],
+            options={
+                "minimap": {"enabled": True},
+                "lineNumbers": "on",
+                "folding": True,
+                "formatOnPaste": True,
+            },
+            # Use ActionHandlerMap for dynamic action handling
+            action_handlers=ActionHandlerMap(
+                handlers={
+                    "analyze": handle_code_analyze,
+                    "format": handle_code_format
+                }
+            )
+        ),
+        MarkdownComponent(
+            key="analysis_output",
+            title="Analysis Results",
+            content="*Submit code for analysis by clicking action buttons*",
+            style={"padding": "1rem", "backgroundColor": "#f5f5f5"}
+        )
+    ]
+)
+async def code_review_interface(input_data: CodeReviewInput) -> CodeReviewOutput:
+    """Handle interactive code review interface."""
+    # logger.debug(f"code_review: {input_data}")
+    return CodeReviewOutput(
+        data={
+            "initialized": True,
+            "timestamp": datetime.now().isoformat()
+        },
+        ui_updates=[]
+    )

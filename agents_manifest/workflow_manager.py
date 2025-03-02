@@ -9,7 +9,7 @@ import inspect
 from agents_manifest.base_types import (
     WorkflowStepType, BaseMetadata, AgentConfig,
     Workflow, WorkflowStepMetadata, WorkflowStep,
-    slugify
+    ActionType, slugify
 )
 from agents_manifest.ui_components import UIComponentBase
 from agents_manifest.session_manager import SessionManager
@@ -106,7 +106,6 @@ def get_workflow_registry(agent_name: str) -> WorkflowRegistry:
 def workflow_step(
     agent_config: AgentConfig,
     workflow_id: str,
-    action_type: str,
     step_id: str,
     name: str,
     description: str,
@@ -118,7 +117,7 @@ def workflow_step(
         try:
             metadata = WorkflowStepMetadata(
                 workflow_id=workflow_id,
-                action_type=action_type,
+                action_type=ActionType.CUSTOM_UI,
                 step_id=step_id,
                 name=name,
                 description=description,

@@ -7,7 +7,7 @@ from enum import Enum
 from agents_manifest.base_types import ActionType, Capability, AgentConfig, UIResponse, UIComponentUpdate
 from agents_manifest.action_manager import agent_action
 from agents_manifest.manifest_generator import configure_agent
-from agents_manifest.ui_components import FormComponent, FormField, TableComponent, TableColumn
+from agents_manifest.ui_components import FormComponent, FormField, TableComponent, TableColumn, ActionHandlerMap
 from agents.llm_client import create_llm_client
 
 class SeatClass(str, Enum):
@@ -103,11 +103,16 @@ class TravelPlanResponse(BaseModel):
 class SeatSelectionInput(BaseModel):
     """Input for seat selection interface."""
     flight_number: str
-    passenger_count: int = Field(default=1, ge=1, le=9)
+    passenger_count: Optional[int] = Field(default=1, ge=1, le=9)
+    action: Optional[str] = None
+    component_key: Optional[str] = None
+    seat_number: Optional[str] = None
+    selected_class: Optional[str] = None
 
 class SeatSelectionOutput(UIResponse):
     """Output for seat selection interface with UI updates."""
-    pass
+    data: Dict[str, Any]
+    ui_updates: List[UIComponentUpdate]
 
 
 # Define rich capabilities for the flight agent
@@ -385,6 +390,85 @@ async def plan_travel(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def handle_search_seats(
+    flight_number: str,
+    selected_class: Optional[str] = None,
+    **kwargs
+) -> UIResponse:
+    """Handle the search_seats action from the form."""
+    # Generate sample seat data
+    seat_class = selected_class if selected_class else "economy"
+    # Create different seat data based on class
+    if seat_class == "economy":
+        rows = range(10, 30)
+        price_base = 150.00
+    elif seat_class == "business":
+        rows = range(4, 10)
+        price_base = 450.00
+    else:  # First class
+        rows = range(1, 4)
+        price_base = 950.00
+    # Generate seats with randomized availability
+    sample_seats = [
+        {
+            "seat_number": f"{row}{letter}",
+            "class": seat_class.capitalize(),
+            "price": price_base + random.randint(-20, 50),
+            "available": random.random() > 0.3  # 70% of seats available
+        }
+        for row in rows
+        for letter in ['A', 'B', 'C', 'D', 'E', 'F']
+    ]
+
+    return UIResponse(
+        data={
+            "flight_number": flight_number,
+            "class": seat_class,
+            "total_seats": len(sample_seats),
+            "available_seats": len([s for s in sample_seats if s["available"]])
+        },
+        ui_updates=[
+            UIComponentUpdate(
+                key="seats_table",
+                state={"data": sample_seats}
+            )
+        ]
+    )
+
+async def handle_select_seat(
+    seat_number: str = "A123",
+    flight_number: str = "",
+    **kwargs
+) -> UIResponse:
+    """Handle the select_seat action from the table."""
+    # In a real implementation, this would update a backend reservation
+    return UIResponse(
+        data={
+            "seat_selected": seat_number,
+            "flight_number": flight_number,
+            "selection_time": "2025-03-02T20:15:00Z",
+            "confirmation_code": f"SEAT{random.randint(10000, 99999)}"
+        },
+        ui_updates=[
+            UIComponentUpdate(
+                key="selection_status",
+                state={
+                    "content": f"## Seat Selected\n\nYou have selected seat **{seat_number}** on flight **{flight_number}**.\n\nConfirmation code: **SEAT{random.randint(10000, 99999)}**"
+                }
+            ),
+            # Update table to mark seat as unavailable
+            UIComponentUpdate(
+                key="seats_table",
+                state={
+                    "data_updates": [
+                        {"row_index": 0, "field": "available", "value": False}
+                    ]
+                }
+            )
+        ]
+    )
+
+# Register the seat selection interface
 @agent_action(
     agent_config=flight_agent_app,
     action_type=ActionType.CUSTOM_UI,
@@ -402,9 +486,10 @@ async def plan_travel(
                     required=True
                 ),
                 FormField(
-                    name="class",
+                    name="selected_class",
                     label="Class",
                     type="select",
+                    required=False,
                     options=[
                         {"value": "economy", "label": "Economy"},
                         {"value": "business", "label": "Business"},
@@ -412,7 +497,8 @@ async def plan_travel(
                     ]
                 )
             ],
-            submit_action="search_seats"
+            submit_action="search_seats",
+            on_submit=handle_search_seats
         ),
         TableComponent(
             key="seats_table",
@@ -424,39 +510,59 @@ async def plan_travel(
                 TableColumn(field="available", header="Available")
             ],
             data=[],  # Initially empty
-            actions=["select_seat"]
+            actions=["select_seat"],
+            action_handlers=ActionHandlerMap(
+                handlers={
+                    "select_seat": handle_select_seat
+                }
+            )
         )
     ]
 )
 async def seat_selection_interface(input_data: SeatSelectionInput) -> SeatSelectionOutput:
     """Handle the seat selection interface."""
-    # Simulate fetching seat data
+    # Check if we're handling a component action
+    if hasattr(input_data, 'action') and input_data.action:
+        try:
+            # Try to dispatch the action
+            component_key = getattr(input_data, 'component_key', 'flight_info')
+            data_dict = input_data.dict() if hasattr(input_data, 'dict') else {}
+            result = await global_dispatcher.dispatch_action(
+                component_key=component_key,
+                action=input_data.action,
+                data=data_dict
+            )
+            # If we got a result, convert it to SeatSelectionOutput
+            if result:
+                return SeatSelectionOutput(
+                    data=result.data,
+                    ui_updates=result.ui_updates
+                )
+        except Exception as e:
+            # Fall back to initial UI if dispatching fails
+            print(f"Error dispatching action: {str(e)}")
+    # Initial UI setup or fallback
+    # Generate sample seat data
     sample_seats = [
         {"seat_number": f"{row}{letter}",
          "class": "Economy" if row > 3 else "Business",
          "price": 150.00 if row > 3 else 450.00,
          "available": True}
-        for row in range(1, 20)
+        for row in range(1, 5)  # Just show a few rows initially
         for letter in ['A', 'B', 'C', 'D', 'E', 'F']
     ]
 
     return SeatSelectionOutput(
         data={
-            "flight_number": input_data.flight_number,
+            "flight_number": getattr(input_data, 'flight_number', ''),
+            "passenger_count": getattr(input_data, 'passenger_count', 1),
             "total_seats": len(sample_seats),
             "available_seats": len([s for s in sample_seats if s["available"]])
         },
         ui_updates=[
             UIComponentUpdate(
                 key="seats_table",
-                state={"data": sample_seats[:input_data.passenger_count * 10]}  # Show limited seats
-            ),
-            UIComponentUpdate(
-                key="flight_info",
-                state={
-                    "flight_number": input_data.flight_number,
-                    "readonly": True
-                }
+                state={"data": sample_seats}
             )
         ]
     )

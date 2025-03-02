@@ -31,12 +31,12 @@ CODE_REVIEW_WORKFLOW = Workflow(
     name="Interactive Code Review",
     description="Multi-step code review process with UI interactions",
     steps=[
-        WorkflowStep(id="upload", type=WorkflowStepType.START),
-        WorkflowStep(id="analyze", type=WorkflowStepType.UI_STEP),
-        WorkflowStep(id="improve", type=WorkflowStepType.UI_STEP),
-        WorkflowStep(id="score", type=WorkflowStepType.UI_STEP),
-        WorkflowStep(id="review", type=WorkflowStepType.UI_STEP),
-        WorkflowStep(id="complete", type=WorkflowStepType.END)
+        WorkflowStep(id="upload"),
+        WorkflowStep(id="analyze"),
+        WorkflowStep(id="improve"),
+        WorkflowStep(id="score"),
+        WorkflowStep(id="review"),
+        WorkflowStep(id="complete")
     ],
     initial_step="upload"
 )
@@ -63,7 +63,6 @@ code_assistant_v2_app = AgentConfig(
     step_id="upload",
     name="Code Upload",
     description="Initial code upload step",
-    action_type=ActionType.CUSTOM_UI,
     ui_components=[
         CodeEditorComponent(
             key="code_input",
@@ -111,7 +110,6 @@ async def handle_upload(data: Dict[str, Any]) -> WorkflowStepResponse:
     step_id="analyze",
     name="Code Analysis",
     description="Analyze code and provide initial feedback",
-    action_type=ActionType.CUSTOM_UI,
     ui_components=[
         CodeEditorComponent(
             key="code_display",
@@ -156,7 +154,6 @@ Would you like to apply automatic improvements?"""
     step_id="improve",
     name="Code Improvement",
     description="Apply improvements to the code",
-    action_type=ActionType.CUSTOM_UI,
     ui_components=[
         CodeEditorComponent(
             key="improved_code",
@@ -173,7 +170,7 @@ Would you like to apply automatic improvements?"""
 async def handle_improvement(data: Dict[str, Any]) -> WorkflowStepResponse:
     """Apply code improvements."""
     # Need to move and abstract the context retrieval logic
-    code = data["context"]["context"]["code"]
+    code = data["context"]["code"]
     action = data.get("action")
 
     if action == "format":
@@ -198,7 +195,6 @@ async def handle_improvement(data: Dict[str, Any]) -> WorkflowStepResponse:
     step_id="review",
     name="Final Review",
     description="Review improvements and approve changes",
-    action_type=ActionType.CUSTOM_UI,
     ui_components=[
         CodeEditorComponent(
             key="final_code",
@@ -253,7 +249,6 @@ async def handle_review(data: Dict[str, Any]) -> WorkflowStepResponse:
     step_id="complete",
     name="Review Complete",
     description="Final completion step of code review",
-    action_type=ActionType.CUSTOM_UI,
     ui_components=[
         MarkdownComponent(
             key="completion_summary",
@@ -279,7 +274,6 @@ async def handle_completion(data: Dict[str, Any]) -> WorkflowStepResponse:
     step_id="score",
     name="Code Quality Scoring",
     description="Score code quality across multiple dimensions",
-    action_type=ActionType.CUSTOM_UI,
     ui_components=[
         TableComponent(
             key="quality_metrics",
@@ -317,7 +311,7 @@ async def handle_completion(data: Dict[str, Any]) -> WorkflowStepResponse:
 )
 async def handle_scoring(data: Dict[str, Any]) -> WorkflowStepResponse:
     """Score code quality across multiple dimensions."""
-    code = data["context"]["context"]["code"]
+    code = data["context"]["code"]
     # Generate quality metrics
     metrics = [
         {

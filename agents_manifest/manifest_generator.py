@@ -6,15 +6,18 @@ from fastapi.responses import HTMLResponse, Response
 from jinja2 import Environment, FileSystemLoader, Template
 from pathlib import Path
 import sys
-import inspect 
+import inspect
 from loguru import logger
 from agents_manifest.base_types import (
     Capability, ActionType, WorkflowStepType, AgentConfig, slugify,
-    Workflow, WorkflowStep, WorkflowTransition, WorkflowDataMapping
+    Workflow, WorkflowStep, WorkflowTransition, WorkflowDataMapping,
+    UIResponse
 )
 from agents_manifest.action_manager import ActionRegistry, agent_action, get_action_registry, ActionEndpointInfo
 from agents_manifest.workflow_manager import WorkflowRegistry, configure_workflow_routes, workflow_step, get_workflow_registry
 from agents_manifest.ui_components import UIComponentBase
+from agents_manifest.ui_events_dispatcher import ComponentEventDispatcher, EventDispatchError
+global_dispatcher = ComponentEventDispatcher()
 
 class AgentManager:
     """Manages the lifecycle and configuration of multiple agents within a FastAPI application.
@@ -279,95 +282,131 @@ def configure_agent_routes(
    action_registry: ActionRegistry,
    workflow_registry: Optional[WorkflowRegistry] = None
 ):
-   """Configure both action and workflow routes."""
-   logger.debug(f"Configuring routes for agent: {agent_slug}")
+    """Configure both action and workflow routes."""
+    logger.debug(f"Configuring routes for agent: {agent_slug}")
 
-   # Action routes
-   for action_slug, endpoint_info in action_registry.actions.items():
-       route_path = f"/agents/{agent_slug}/actions/{action_slug}"
-       endpoint_info.route_path = route_path
-       logger.debug(f"Setting up action route: {route_path}")
+    # Action routes
+    for action_slug, endpoint_info in action_registry.actions.items():
+        route_path = f"/agents/{agent_slug}/actions/{action_slug}"
+        endpoint_info.route_path = route_path
+        logger.debug(f"Setting up action route: {route_path}")
 
-       async def action_handler(
-           request_data: endpoint_info.input_model, 
-           ei: ActionEndpointInfo = endpoint_info
-       ):
-           try:
-               result = await ei.handler(request_data)
-               if ei.metadata.response_template_md:
-                   template_path = Path(ei.metadata.response_template_md)
-                   if template_path.exists():
-                       template_content = template_path.read_text()
-                       rendered = Template(template_content).render(**result.dict())
-                       return Response(content=rendered, media_type="text/markdown")
-               return result
-           except Exception as e:
-               logger.error(f"Error in action handler: {str(e)}")
-               raise HTTPException(status_code=500, detail=str(e))
+        async def action_handler(
+            request_data: endpoint_info.input_model,
+            ei: ActionEndpointInfo = endpoint_info
+        ):
+            try:
+                # Check for UI components and action dispatching
+                if (ei.metadata.ui_components and
+                        hasattr(request_data, 'action') and
+                        request_data.action):
+                        # Get the target component key
+                        target_key = getattr(request_data, 'component_key', 'main_editor')
+                        logger.debug(f"Handling component action: {request_data.action} for {target_key}")
+                        # Prepare data for dispatching
+                        data_dict = request_data.dict() if hasattr(request_data, 'dict') else {}
+                        try:
+                            # Try to dispatch through global event system
+                            logger.debug(f"Attempting to dispatch action via global_dispatcher")
+                            logger.debug(f"Available action handlers: {global_dispatcher._action_handlers}")
+                            result = await global_dispatcher.dispatch_action(
+                                component_key=target_key,
+                                action=request_data.action,
+                                data=data_dict
+                            )
+                            logger.debug(f"Dispatch result: {result}")
+                            # Convert to UIResponse if needed
+                            if result and not isinstance(result, UIResponse):
+                                if hasattr(result, 'dict'):
+                                    result = UIResponse(data=result.dict(), ui_updates=[])
+                                else:
+                                    result = UIResponse(data=result, ui_updates=[])
+                            return result
+                        except EventDispatchError as e:
+                            logger.warning(f"Event dispatch failed: {str(e)}")
+                # Fall back to original handler
+                # If we get here, either:
+                # 1. This is not an action request
+                # 2. Action dispatch failed and no direct handler was found
+                # 3. Direct handler failed
+                # So fall back to the original handler
+                logger.debug(f"Falling back to original handler")
+                result = await ei.handler(request_data)
+                # Handle response template
+                if ei.metadata.response_template_md:
+                    template_path = Path(ei.metadata.response_template_md)
+                    if template_path.exists():
+                        template_content = template_path.read_text()
+                        rendered = Template(template_content).render(**result.dict())
+                        return Response(content=rendered, media_type="text/markdown")
+                return result
+            except Exception as e:
+                logger.error(f"Error in action handler: {str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
 
-       app.add_api_route(
-           route_path,
-           action_handler,
-           methods=["POST"],
-           response_model=endpoint_info.output_model
-       )
+        app.add_api_route(
+            route_path,
+            action_handler,
+            methods=["POST"],
+            response_model=endpoint_info.output_model
+        )
 
    # Workflow routes
-   if workflow_registry and workflow_registry.workflows:
-       for workflow in workflow_registry.workflows.values():
-           logger.debug(f"Setting up workflow: {workflow.id}")
+    if workflow_registry and workflow_registry.workflows:
+        for workflow in workflow_registry.workflows.values():
+            logger.debug(f"Setting up workflow: {workflow.id}")
            
-           # Start route
-           start_path = f"/agents/{agent_slug}/workflow/{workflow.id}/start"
-           logger.debug(f"Registering workflow start: {start_path}")
+            # Start route
+            start_path = f"/agents/{agent_slug}/workflow/{workflow.id}/start"
+            logger.debug(f"Registering workflow start: {start_path}")
 
-           async def workflow_start_handler(data: Dict[str, Any]):
-               try:
-                   handler_info = workflow_registry.get_step_handler(workflow.id, workflow.initial_step)
-                   if not handler_info:
-                       msg = f"Initial step handler not found for workflow {workflow.id}"
-                       logger.error(msg)
-                       raise HTTPException(404, msg)
-                   handler, _ = handler_info
-                   return await handler(data)
-               except Exception as e:
-                   logger.error(f"Error in workflow start: {str(e)}")
-                   raise HTTPException(status_code=500, detail=str(e))
+            async def workflow_start_handler(data: Dict[str, Any]):
+                try:
+                    handler_info = workflow_registry.get_step_handler(workflow.id, workflow.initial_step)
+                    if not handler_info:
+                        msg = f"Initial step handler not found for workflow {workflow.id}"
+                        logger.error(msg)
+                        raise HTTPException(404, msg)
+                    handler, _ = handler_info
+                    return await handler(data)
+                except Exception as e:
+                    logger.error(f"Error in workflow start: {str(e)}")
+                    raise HTTPException(status_code=500, detail=str(e))
 
-           app.add_api_route(
-               start_path,
-               workflow_start_handler,
-               methods=["POST"]
-           )
+            app.add_api_route(
+                start_path,
+                workflow_start_handler,
+                methods=["POST"]
+            )
 
            # Step routes
-           for step in workflow.steps:
-               if step.type != WorkflowStepType.END:
-                   step_path = f"/agents/{agent_slug}/workflow/{workflow.id}/steps/{step.id}"
-                   logger.debug(f"Registering step route: {step_path}")
+            for step in workflow.steps:
+                if step.type != WorkflowStepType.END:
+                    step_path = f"/agents/{agent_slug}/workflow/{workflow.id}/steps/{step.id}"
+                    logger.debug(f"Registering step route: {step_path}")
+ 
+                    async def step_handler(
+                        data: Dict[str, Any],
+                        step_id: str = step.id,
+                        wf_id: str = workflow.id
+                    ):
+                        try:
+                            handler_info = workflow_registry.get_step_handler(wf_id, step_id)
+                            if not handler_info:
+                                msg = f"Handler not found for step {step_id}"
+                                logger.error(msg)
+                                raise HTTPException(404, msg)
+                            handler, _ = handler_info
+                            return await handler(data)
+                        except Exception as e:
+                            logger.error(f"Error in step handler: {str(e)}")
+                            raise HTTPException(status_code=500, detail=str(e))
 
-                   async def step_handler(
-                       data: Dict[str, Any],
-                       step_id: str = step.id,
-                       wf_id: str = workflow.id
-                   ):
-                       try:
-                           handler_info = workflow_registry.get_step_handler(wf_id, step_id)
-                           if not handler_info:
-                               msg = f"Handler not found for step {step_id}"
-                               logger.error(msg)
-                               raise HTTPException(404, msg)
-                           handler, _ = handler_info
-                           return await handler(data)
-                       except Exception as e:
-                           logger.error(f"Error in step handler: {str(e)}")
-                           raise HTTPException(status_code=500, detail=str(e))
-
-                   app.add_api_route(
-                       step_path,
-                       step_handler,
-                       methods=["POST"]
-                   )
+                    app.add_api_route(
+                        step_path,
+                        step_handler,
+                        methods=["POST"]
+                    )
 # Global registry storage
 agent_registries: Dict[str, AgentRegistry] = {}
 def configure_agent(
@@ -389,6 +428,22 @@ def configure_agent(
     action_registry = get_action_registry(name)
     registry.action_registry = action_registry
     workflow_registry = get_workflow_registry(name) if workflows else None
+    # Register all UI components and their handlers with the global dispatcher
+    for action_slug, endpoint_info in action_registry.actions.items():
+        if hasattr(endpoint_info.metadata, 'ui_components') and endpoint_info.metadata.ui_components:
+            for component in endpoint_info.metadata.ui_components:
+                logger.debug(f"Registering component {component.key} from {action_slug}")
+                # Register component with global dispatcher
+                global_dispatcher.register_component_handlers(component)
+                # Explicitly register action handlers
+                if hasattr(component, 'action_handlers') and component.action_handlers:
+                    for action, handler in component.action_handlers.handlers.items():
+                        logger.debug(f"Registering action handler {action} for {component.key}")
+                        global_dispatcher.register_action_handler(
+                            component_key=component.key,
+                            action=action,
+                            handler=handler
+                        )
     configure_agent_routes(app, agent_slug, action_registry, workflow_registry)
     if workflow_registry and workflows:
         for workflow in workflows:
