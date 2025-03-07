@@ -6,7 +6,7 @@ from datetime import datetime
 import re
 from pydantic import BaseModel, Field
 
-from agents_manifest.ui_components import UIComponentBase
+from agents_manifest.ui_components import UIComponent
 
 class ActionType(str, Enum):
     """Enumerate the types of actions an agent can perform.
@@ -232,7 +232,7 @@ class WorkflowStepMetadata:
         action_type (str): Type of action for the step
         name (str): Human-readable name of the step
         description (str): Detailed description of the step
-        ui_components (List[UIComponentBase]): UI components for the step
+        ui_components (List[UIComponent]): UI components for the step
         allow_dynamic_ui (bool): Flag to enable dynamic UI generation
         input_model (Optional[Type[BaseModel]]): Input validation model
         output_model (Optional[Type[BaseModel]]): Output validation model
@@ -242,7 +242,7 @@ class WorkflowStepMetadata:
     action_type: str
     name: str
     description: str
-    ui_components: List[UIComponentBase] = field(default_factory=list)
+    ui_components: List[UIComponent] = field(default_factory=list)
     allow_dynamic_ui: bool = True
     input_model: Optional[Type[BaseModel]] = None
     output_model: Optional[Type[BaseModel]] = None

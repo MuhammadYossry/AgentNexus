@@ -15,8 +15,7 @@ from agents_manifest.base_types import (
 )
 from agents_manifest.action_manager import ActionRegistry, agent_action, get_action_registry, ActionEndpointInfo
 from agents_manifest.workflow_manager import WorkflowRegistry, configure_workflow_routes, workflow_step, get_workflow_registry
-from agents_manifest.ui_components import UIComponentBase
-from agents_manifest.ui_events_dispatcher import ComponentEventDispatcher, EventDispatchError
+from agents_manifest.event_dispatcher import ComponentEventDispatcher, EventDispatchError
 global_dispatcher = ComponentEventDispatcher()
 
 class AgentManager:
@@ -322,6 +321,7 @@ def configure_agent_routes(
                                 else:
                                     result = UIResponse(data=result, ui_updates=[])
                             return result
+
                         except EventDispatchError as e:
                             logger.warning(f"Event dispatch failed: {str(e)}")
                 # Fall back to original handler
@@ -432,7 +432,7 @@ def configure_agent(
     for action_slug, endpoint_info in action_registry.actions.items():
         if hasattr(endpoint_info.metadata, 'ui_components') and endpoint_info.metadata.ui_components:
             for component in endpoint_info.metadata.ui_components:
-                logger.debug(f"Registering component {component.key} from {action_slug}")
+                logger.debug(f"Registering component {component.component_key} from {action_slug}")
                 # Register component with global dispatcher
                 global_dispatcher.register_component_handlers(component)
                 # Explicitly register action handlers
@@ -440,7 +440,7 @@ def configure_agent(
                     for action, handler in component.action_handlers.handlers.items():
                         logger.debug(f"Registering action handler {action} for {component.key}")
                         global_dispatcher.register_action_handler(
-                            component_key=component.key,
+                            component_key=component.component_key,
                             action=action,
                             handler=handler
                         )

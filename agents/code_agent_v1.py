@@ -14,7 +14,8 @@ from agents.models.code_agent_v1 import (
 )
 from agents_manifest.base_types import AgentConfig, Capability, UIComponentUpdate, UIResponse
 from agents_manifest.manifest_generator import configure_agent, ActionType
-from agents_manifest.action_manager import agent_action
+# from agents_manifest.action_manager import agent_action
+from agents_manifest.agent_action_integration import enhanced_agent_action
 from agents_manifest.ui_components import CodeEditorComponent, MarkdownComponent, ActionHandlerMap
 from agents.llm_client import create_llm_client
 
@@ -123,7 +124,7 @@ async def _apply_code_changes(change: Any) -> str:
     )
     return response.content
 
-@agent_action(
+@enhanced_agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.TALK,
     name="Chat with Python Assistant",
@@ -151,7 +152,7 @@ async def chat_with_agent(input_data: ChatInput) -> ChatOutput:
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@agent_action(
+@enhanced_agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.GENERATE,
     name="Generate Python Code",
@@ -181,7 +182,7 @@ async def generate_code(input_data: GenerateCodeInput) -> GenerateCodeOutput:
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@agent_action(
+@enhanced_agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.GENERATE,
     name="Improve Python Code",
@@ -542,7 +543,7 @@ Output only JSON following the questionnaire_form format."""
     # Same response parsing as before
     return parse_questionnaire_response(response)
 
-@agent_action(
+@enhanced_agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.QUESTION,
     name="Collect Requirements",
@@ -697,7 +698,6 @@ async def collect_requirements(input_data: CollectRequirementsInput) -> CollectR
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# Define standalone handlers for better modularity
 async def handle_code_analyze(code: str, language: str = "python", **kwargs) -> UIResponse:
     """Handler for code analysis action."""
     try:
@@ -783,43 +783,47 @@ async def handle_code_format(code: str, language: str = "python", **kwargs) -> U
             ]
         )
 
-@agent_action(
+# Create the components directly
+main_editor = CodeEditorComponent(
+    component_key="main_editor",
+    title="Source Code",
+    programming_language="python",
+    editor_content="# Enter your Python code here\n\ndef example_function():\n    print('Hello, world!')",
+    available_actions=["analyze", "format"],
+    editor_options={
+        "minimap": {"enabled": True},
+        "lineNumbers": "on",
+        "folding": True,
+        "formatOnPaste": True,
+    },
+    # Use ActionHandlerMap for dynamic action handling
+    action_handlers=ActionHandlerMap(
+        handlers={
+            "analyze": handle_code_analyze,
+            "format": handle_code_format
+        }
+    )
+)
+
+analysis_output = MarkdownComponent(
+    component_key="analysis_output",
+    title="Analysis Results",
+    markdown_content="*Submit code for analysis by clicking action buttons*",
+    content_style={"padding": "1rem", "backgroundColor": "#f5f5f5"}
+)
+
+@enhanced_agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.CUSTOM_UI,
     name="Interactive Code Review",
     description="Interactive interface for code review and analysis",
     ui_components=[
-        CodeEditorComponent(
-            key="main_editor",
-            title="Source Code",
-            language="python",
-            content="# Enter your Python code here\n\ndef example_function():\n    print('Hello, world!')",
-            actions=["analyze", "format"],
-            options={
-                "minimap": {"enabled": True},
-                "lineNumbers": "on",
-                "folding": True,
-                "formatOnPaste": True,
-            },
-            # Use ActionHandlerMap for dynamic action handling
-            action_handlers=ActionHandlerMap(
-                handlers={
-                    "analyze": handle_code_analyze,
-                    "format": handle_code_format
-                }
-            )
-        ),
-        MarkdownComponent(
-            key="analysis_output",
-            title="Analysis Results",
-            content="*Submit code for analysis by clicking action buttons*",
-            style={"padding": "1rem", "backgroundColor": "#f5f5f5"}
-        )
+        main_editor,
+        analysis_output
     ]
 )
 async def code_review_interface(input_data: CodeReviewInput) -> CodeReviewOutput:
     """Handle interactive code review interface."""
-    # logger.debug(f"code_review: {input_data}")
     return CodeReviewOutput(
         data={
             "initialized": True,

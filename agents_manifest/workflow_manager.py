@@ -11,7 +11,7 @@ from agents_manifest.base_types import (
     Workflow, WorkflowStepMetadata, WorkflowStep,
     ActionType, slugify
 )
-from agents_manifest.ui_components import UIComponentBase
+from agents_manifest.ui_components import UIComponent
 from agents_manifest.session_manager import SessionManager
 
 class WorkflowRegistry:
@@ -109,7 +109,7 @@ def workflow_step(
     step_id: str,
     name: str,
     description: str,
-    ui_components: Optional[List[UIComponentBase]] = None,
+    ui_components: Optional[List[UIComponent]] = None,
     allow_dynamic_ui: bool = True
 ) -> Callable:
     """decorator for UI-driven workflow steps."""

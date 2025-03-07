@@ -11,8 +11,8 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from jinja2 import Template
 from agents_manifest.base_types import ActionType, BaseMetadata, AgentConfig, slugify, UIComponentUpdate, UIResponse
-from agents_manifest.ui_components import UIComponentBase
-from agents_manifest.ui_events_dispatcher import ComponentEventDispatcher
+from agents_manifest.ui_components import UIComponent
+from agents_manifest.event_dispatcher import ComponentEventDispatcher
 
 @dataclass
 class ActionMetadata:
@@ -24,7 +24,7 @@ class ActionMetadata:
     workflow_id: Optional[str] = None
     step_id: Optional[str] = None
     allow_dynamic_ui: bool = False
-    ui_components: List[UIComponentBase] = field(default_factory=list)
+    ui_components: List[UIComponent] = field(default_factory=list)
 
 @dataclass
 class ActionEndpointInfo:
@@ -91,7 +91,7 @@ def agent_action(
     examples: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     workflow_id: Optional[str] = None,
     step_id: Optional[str] = None,
-    ui_components: Optional[List[UIComponentBase]] = None,
+    ui_components: Optional[List[UIComponent]] = None,
     allow_dynamic_ui: bool = False
 ) -> Callable:
     """Decorator for registering agent actions with comprehensive metadata.
