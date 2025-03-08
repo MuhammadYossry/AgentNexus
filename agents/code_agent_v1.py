@@ -796,15 +796,11 @@ main_editor = CodeEditorComponent(
         "folding": True,
         "formatOnPaste": True,
     },
-    # Use ActionHandlerMap for dynamic action handling
-    action_handlers=ActionHandlerMap(
-        handlers={
-            "analyze": handle_code_analyze,
-            "format": handle_code_format
-        }
-    )
+    event_handlers={  # Add event handlers directly
+        "analyze": handle_code_analyze,
+        "format": handle_code_format
+    }
 )
-
 analysis_output = MarkdownComponent(
     component_key="analysis_output",
     title="Analysis Results",

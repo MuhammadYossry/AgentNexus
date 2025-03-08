@@ -166,8 +166,8 @@ def agent_action(
                         # Dispatch action through global dispatcher
                         result = await global_dispatcher.dispatch_action(
                             component_key=target_component_key,
-                            action=input_data.action,
-                            data=data_dict
+                            action_name=input_data.action,
+                            action_data=data_dict
                         )
                         logger.debug(f"Dispatch result: {result}")
                         # Convert to UIResponse if needed

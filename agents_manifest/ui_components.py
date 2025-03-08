@@ -13,15 +13,29 @@ class ComponentEventType(str, Enum):
     """Standard event types for UI components with descriptive naming."""
     CONTENT_CHANGE = "content_change"
     SUBMIT = "submit"
-    ROW_ACTION = "row_action"
+    ROW_CLICK = "row_click"
     SORT = "sort"
     PAGINATION = "pagination" 
-    ACTION = "action"
+    CLICK = "click"
     VALIDATION = "validation"
     FIELD_CHANGE = "field_change"
     FORMAT = "format"
     LINT = "lint"
     SAVE = "save"
+
+class EventContext(BaseModel):
+    """
+    Context information for an event, including the context type and associated data.
+
+    This class allows components to provide more specific context data when
+    an event is triggered, such as the row data for a table row click.
+    """
+    context_type: str = "default"  # e.g., "row", "cell", "form", etc.
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
 
 
 class UIComponent(BaseModel):
@@ -35,6 +49,7 @@ class UIComponent(BaseModel):
     title: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
     component_state: Dict[str, Any] = Field(default_factory=dict)
+    supported_events: List[str] = Field(default_factory=list)
     # Dictionary of event handlers, excluded from serialization
     event_handlers: Dict[str, Callable] = Field(default_factory=dict, exclude=True)
     # Class variable defining valid event types for component subclasses
@@ -44,38 +59,78 @@ class UIComponent(BaseModel):
         "arbitrary_types_allowed": True
     }
 
-    def register_event_handler(self, event_type: str, handler_function: Callable) -> None:
+    def register_event_handler(self, event_name: str, handler_function: Callable) -> None:
         """
         Register an event handler for this component.
 
         Args:
-            event_type: The type of event to handle
+            event_name: The type of event to handle
             handler_function: The function to call when the event occurs
 
         Raises:
             ValueError: If the event type is not valid for this component
         """
-        if event_type not in self.valid_event_types:
+        if event_name not in self.valid_event_types:
             valid_events = ", ".join(self.valid_event_types)
             raise ValueError(
-                f"Invalid event type '{event_type}' for {self.component_type} component. "
+                f"Invalid event type '{event_name}' for {self.component_type} component. "
                 f"Valid events are: {valid_events}"
             )
-        self.event_handlers[event_type] = handler_function
-        logger.debug(f"Registered handler for {self.component_key}.{event_type}")
+        if event_name not in self.supported_events:
+            self.supported_events.append(event_name)
+        self.event_handlers[event_name] = handler_function
+        logger.debug(f"Registered handler for {self.component_key}.{event_name}")
 
-    def get_event_handler(self, event_type: str) -> Optional[Callable]:
+    def get_event_handler(self, event_name: str) -> Optional[Callable]:
         """
         Get the handler function for a specific event type.
 
         Args:
-            event_type: The type of event to get handler for
+            event_name: The type of event to get handler for
   
         Returns:
             The handler function or None if not registered
         """
-        return self.event_handlers.get(event_type)
-    
+        return self.event_handlers.get(event_name)
+
+    async def handle_event(self, event_name: str, context: Optional[EventContext] = None, **kwargs) -> Any:
+        """
+        Handle an event with the registered handler.
+
+        Args:
+            event_name: The name of the event to handle
+            context: Optional context information for the event
+            **kwargs: Additional parameters to pass to the handler
+
+        Returns:
+            The result of the handler function
+        """
+        handler = self.get_event_handler(event_name)
+        if not handler:
+            logger.warning(f"No handler found for event {event_name} on component {self.component_key}")
+            return None
+        # Prepare event data
+        event_data = kwargs.copy()
+        # Add context data if provided
+        if context:
+            event_data['context_type'] = context.context_type
+            event_data['context_data'] = context.data
+        # Add metadata for convenience
+        event_data['event_name'] = event_name
+        event_data['component_key'] = self.component_key
+        # Call the handler (handle both async and non-async handlers)
+        try:
+            # Filter parameters to match handler signature
+            handler_params = inspect.signature(handler).parameters
+            filtered_data = {k: v for k, v in event_data.items() if k in handler_params}
+            if inspect.iscoroutinefunction(handler):
+                return await handler(**filtered_data)
+            else:
+                return handler(**filtered_data)
+        except Exception as e:
+            logger.error(f"Error handling event {event_name} on {self.component_key}: {str(e)}", exc_info=True)
+            raise e
+
     @model_validator(mode='after')
     def setup_event_handlers(self) -> 'UIComponent':
         """
@@ -159,26 +214,44 @@ class TableColumn(BaseModel):
 class TableComponent(UIComponent):
     """
     Table component with integrated event handling.
-    
+
     Displays tabular data with support for sorting, pagination,
-    and row actions. Handlers can be attached directly to the component.
+    and row interaction events like row_click.
     """
     component_type: str = "table"
     columns: List[TableColumn]
     table_data: List[Dict[str, Any]]
-    available_actions: List[str] = Field(default_factory=list)
+    # available_actions: List[str] = Field(default_factory=list)
+    # row_actions: List[str] = Field(default_factory=list)  # Actions that apply to individual rows
     enable_pagination: bool = True
     rows_per_page: int = 10
     # Event handlers as component attributes
-    on_row_action: Optional[Callable] = Field(default=None, exclude=True)
+    on_row_click: Optional[Callable] = Field(default=None, exclude=True)
     on_sort: Optional[Callable] = Field(default=None, exclude=True)
     on_pagination: Optional[Callable] = Field(default=None, exclude=True)
+    # Action handlers for row-specific actions
+    # action_handler_registry: Optional[ActionHandlerRegistry] = Field(default=None, exclude=True)
     # Define valid event types for table components
     valid_event_types: ClassVar[List[str]] = [
-        ComponentEventType.ROW_ACTION, 
+        ComponentEventType.ROW_CLICK,
         ComponentEventType.SORT, 
         ComponentEventType.PAGINATION
     ]
+
+    def __init__(self, **data):
+        """Initialize with proper handling of backward compatibility."""
+        # Handle backward compatibility with old attribute names
+        if 'actions' in data and 'supported_events' not in data:
+            data['supported_events'] = data.pop('actions')
+        if 'available_actions' in data and 'supported_events' not in data:
+            data['supported_events'] = data.pop('available_actions')
+        if 'row_actions' in data and 'supported_events' not in data:
+            data['supported_events'] = data.pop('row_actions')
+        # Handle action_handlers old-style initialization (backward compatibility)
+        if 'action_handlers' in data:
+            # We'll convert these to event handlers in setup_event_handlers
+            pass
+        super().__init__(**data)
 
     @model_validator(mode='after')
     def setup_event_handlers(self) -> 'TableComponent':
@@ -187,14 +260,73 @@ class TableComponent(UIComponent):
         if not hasattr(self, 'event_handlers'):
             self.event_handlers = {}
         # Register handlers from attributes
-        if self.on_row_action:
-            self.event_handlers[ComponentEventType.ROW_ACTION] = self.on_row_action
+        if self.on_row_click:
+            self.event_handlers[EventType.ROW_CLICK] = self.on_row_click
         if self.on_sort:
-            self.event_handlers[ComponentEventType.SORT] = self.on_sort
+            self.event_handlers[EventType.SORT] = self.on_sort
         if self.on_pagination:
-            self.event_handlers[ComponentEventType.PAGINATION] = self.on_pagination
+            self.event_handlers[EventType.PAGINATION] = self.on_pagination
+
+        # Handle legacy action_handlers mapping (backward compatibility)
+        if hasattr(self, 'action_handlers') and self.action_handlers:
+            # Process old-style action handlers as event handlers
+            if hasattr(self.action_handlers, 'handlers'):
+                for action_name, handler in self.action_handlers.handlers.items():
+                    # Convert action names to event names
+                    event_name = action_name
+                    # Special case conversions for common actions
+                    if action_name == 'select':
+                        event_name = 'row_click'
+
+                    self.register_event_handler(event_name, handler)
+
         return self
 
+    async def handle_row_action(self, action_name: str, row_data: Dict[str, Any], **kwargs) -> Any:
+        """
+        Handle a row-specific action with the appropriate handler.
+
+        Args:
+            action_name: The name of the row action to handle
+            row_data: The data for the row the action is being performed on
+            **kwargs: Additional parameters to pass to the handler
+
+        Returns:
+            The result of the handler function
+        """
+        handler = self.get_event_handler(event_name)
+        # If no specific handler, check if we have a row_click event handler for legacy "select" events
+        if not handler and event_name == 'select' and EventType.ROW_CLICK in self.event_handlers:
+            handler = self.event_handlers[EventType.ROW_CLICK]
+        # If still no handler, return None
+        if not handler:
+            logger.warning(f"No handler found for event {event_name} on component {self.component_key}")
+            return None
+        # Prepare event data
+        event_data = kwargs.copy()
+        # Add context data if provided
+        if context:
+            if context.context_type == 'row':
+                # For row events, add the row_data directly for convenience
+                event_data['row_data'] = context.data
+            else:
+                event_data['context_type'] = context.context_type
+                event_data['context_data'] = context.data
+        # Add metadata for convenience
+        event_data['event_name'] = event_name
+        event_data['component_key'] = self.component_key
+        # Call the handler (handle both async and non-async handlers)
+        try:
+            # Filter parameters to match handler signature
+            handler_params = inspect.signature(handler).parameters
+            filtered_data = {k: v for k, v in event_data.items() if k in handler_params}
+            if inspect.iscoroutinefunction(handler):
+                return await handler(**filtered_data)
+            else:
+                return handler(**filtered_data)
+        except Exception as e:
+            logger.error(f"Error handling event {event_name} on {self.component_key}: {str(e)}", exc_info=True)
+            raise e
 
 class CodeEditorComponent(UIComponent):
     """
@@ -225,7 +357,7 @@ class CodeEditorComponent(UIComponent):
         ComponentEventType.FORMAT,
         ComponentEventType.LINT,
         ComponentEventType.SAVE,
-        ComponentEventType.ACTION
+        ComponentEventType.CLICK
     ]
 
     def __init__(self, **data):

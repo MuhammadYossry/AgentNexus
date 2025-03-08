@@ -12,7 +12,7 @@ from agents_manifest.agent_action_integration import enhanced_agent_action
 from agents_manifest.ui_components import (
     ActionHandlerRegistry, FormComponent, FormField, TableComponent, TableColumn, MarkdownComponent
 )
-from agents_manifest.component_decorator import component_action_handler
+from agents_manifest.component_decorator import component_event_handler
 from agents.llm_client import create_llm_client
 
 logger = logging.getLogger(__name__)
@@ -409,14 +409,14 @@ async def plan_travel(
         logger.error(f"Error in plan_travel: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+# Create the form component with event handlers directly
 
-@component_action_handler(action_name="search_seats", component_key="flight_info")
-async def handle_search_seats(
+async def handle_form_submit(
     flight_number: str,
     selected_class: Optional[str] = None,
     **kwargs
 ) -> UIResponse:
-    """Handle seat search action from the form."""
+    """Handle form submission event from the flight info form."""
     try:
         # Generate sample seat data
         seat_class = selected_class if selected_class else "economy"
@@ -453,56 +453,15 @@ async def handle_search_seats(
                 UIComponentUpdate(
                     key="seats_table",
                     state={"data": sample_seats}
-                )
-            ]
-        )
-    except Exception as e:
-        logger.error(f"Error in search seats handler: {str(e)}", exc_info=True)
-        return UIResponse(
-            data={"error": str(e)},
-            ui_updates=[
-                UIComponentUpdate(
-                    key="status_display",
-                    state={"content": f"## Error\n\nAn error occurred: {str(e)}"}
-                )
-            ]
-        )
-
-@component_action_handler(action_name="select_seat", component_key="seats_table")
-async def handle_select_seat(
-    seat_number: str,
-    flight_number: str = "",
-    **kwargs
-) -> UIResponse:
-    """Handle seat selection action from the table."""
-    try:
-        confirmation_code = f"SEAT{random.randint(10000, 99999)}"
-        return UIResponse(
-            data={
-                "seat_selected": seat_number,
-                "flight_number": flight_number,
-                "selection_time": datetime.datetime.now().isoformat(),
-                "confirmation_code": confirmation_code
-            },
-            ui_updates=[
-                UIComponentUpdate(
-                    key="status_display",
-                    state={
-                        "content": f"## Seat Selected\n\nYou have selected seat {seat_number} on flight {flight_number}.\n\nConfirmation code: {confirmation_code}"
-                    }
                 ),
                 UIComponentUpdate(
-                    key="seats_table",
-                    state={
-                        "data_updates": [
-                            {"row_match": {"seat_number": seat_number}, "field": "available", "value": False}
-                        ]
-                    }
+                    key="status_display",
+                    state={"content": f"## Flight {flight_number}\n\nShowing available seats for {seat_class} class. Click on a seat to select it."}
                 )
             ]
         )
     except Exception as e:
-        logger.error(f"Error in select seat handler: {str(e)}", exc_info=True)
+        logger.error(f"Error in form submit handler: {str(e)}", exc_info=True)
         return UIResponse(
             data={"error": str(e)},
             ui_updates=[
@@ -513,8 +472,6 @@ async def handle_select_seat(
             ]
         )
 
-
-# Create the components directly using the component factories for cleaner code
 flight_info_form = FormComponent(
     component_key="flight_info",
     component_type="form",
@@ -537,10 +494,76 @@ flight_info_form = FormComponent(
             ]
         )
     ],
-    available_actions=["search_seats"],
-    submit_action_name="search_seats"
+    supported_events=["submit"],
+    event_handlers={  # Add event handlers directly here
+        "submit": handle_form_submit
+    }
 )
 
+async def handle_seat_selection(
+    action: str,  # Will receive 'row_click'
+    data: Dict[str, Any],  # Will receive the row data
+    flight_number: str = "",
+    **kwargs
+) -> UIResponse:
+    """Handle seat selection (row click) event from the table."""
+    try:
+        # Extract seat information from the data
+        row_data = data  # The row data is passed in the data field
+        seat_number = row_data.get("seat_number", "")
+        seat_class = row_data.get("class", "")
+        seat_price = row_data.get("price", 0.0)
+        # Only allow selection if seat is available
+        if row_data.get("available", False):
+            return UIResponse(
+                data={"error": "Seat not available"},
+                ui_updates=[
+                    UIComponentUpdate(
+                        key="status_display",
+                        state={"content": f"## Error\n\nSeat {seat_number} is not available. Please select another seat."}
+                    )
+                ]
+            )
+        confirmation_code = f"SEAT{random.randint(10000, 99999)}"
+        return UIResponse(
+            data={
+                "seat_selected": seat_number,
+                "seat_class": seat_class,
+                "seat_price": seat_price,
+                "flight_number": flight_number,
+                "selection_time": datetime.datetime.now().isoformat(),
+                "confirmation_code": confirmation_code
+            },
+            ui_updates=[
+                UIComponentUpdate(
+                    key="status_display",
+                    state={
+                        "content": f"""## Seat Selected\n\nYou have selected seat **{seat_number}** ({seat_class}) on flight **{flight_number}**.\n\n**Price:** ${seat_price:.2f}\n**Confirmation code:** {confirmation_code}\n\nYour seat has been reserved. Proceed to checkout to complete your booking."""
+                    }
+                ),
+                UIComponentUpdate(
+                    key="seats_table",
+                    state={
+                        "data_updates": [
+                            {"row_match": {"seat_number": seat_number}, "field": "available", "value": False}
+                        ]
+                    }
+                )
+            ]
+        )
+    except Exception as e:
+        logger.error(f"Error in seat selection handler: {str(e)}", exc_info=True)
+        return UIResponse(
+            data={"error": str(e)},
+            ui_updates=[
+                UIComponentUpdate(
+                    key="status_display",
+                    state={"content": f"## Error\n\nAn error occurred: {str(e)}"}
+                )
+            ]
+        )
+
+# Create the table component with event handlers directly
 seats_table = TableComponent(
     component_key="seats_table",
     component_type="table",
@@ -551,10 +574,14 @@ seats_table = TableComponent(
         TableColumn(field_name="price", header_text="Price"),
         TableColumn(field_name="available", header_text="Available")
     ],
-    table_data=[],  # Will be populated by the action handler
-    available_actions=["select_seat"]
+    table_data=[],
+    supported_events=["row_click"],
+    event_handlers={
+        "row_click": handle_seat_selection  # The handler will now receive properly structured data
+    }
 )
 
+# Status display component remains the same
 status_display = MarkdownComponent(
     component_key="status_display",
     component_type="markdown",
@@ -562,6 +589,8 @@ status_display = MarkdownComponent(
     markdown_content="Select a seat to complete your reservation.",
     content_style={"padding": "1rem", "backgroundColor": "#f5f5f5"}
 )
+
+# Remove the @component_event_handler decorators since we're registering handlers directly
 
 @enhanced_agent_action(
     agent_config=flight_agent_app,
@@ -577,15 +606,22 @@ status_display = MarkdownComponent(
 async def seat_selection_interface(input_data: SeatSelectionInput) -> SeatSelectionOutput:
     """
     Handle interactive seat selection interface.
-    
+
+    This function handles the initial state setup. Events like 'row_click'
+    and 'submit' are handled by the component-specific event handlers.
+
     Args:
         input_data: The input data from the client
-        
+
     Returns:
         SeatSelectionOutput with the initial state or response
     """
     try:
         # Initial state setup
+        flight_number = getattr(input_data, 'flight_number', '')
+        passenger_count = getattr(input_data, 'passenger_count', 1)
+
+        # Initial sample seats (just a few to start)
         sample_seats = [
             {"seat_number": f"{row}{letter}",
              "class": "Economy" if row > 3 else "Business",
@@ -597,8 +633,8 @@ async def seat_selection_interface(input_data: SeatSelectionInput) -> SeatSelect
 
         return SeatSelectionOutput(
             data={
-                "flight_number": getattr(input_data, 'flight_number', ''),
-                "passenger_count": getattr(input_data, 'passenger_count', 1),
+                "flight_number": flight_number,
+                "passenger_count": passenger_count,
                 "total_seats": len(sample_seats),
                 "available_seats": len([s for s in sample_seats if s["available"]])
             },

@@ -9,8 +9,7 @@ from pydantic import BaseModel
 
 from agents_manifest.ui_components import (
     UIComponent, TableComponent, CodeEditorComponent, FormComponent, 
-    MarkdownComponent, ActionHandlerRegistry, TableColumn, FormField,
-    ComponentEventType
+    MarkdownComponent, TableColumn, FormField, ComponentEventType
 )
 
 logger = logging.getLogger(__name__)
@@ -95,27 +94,21 @@ def ui_component_decorator(component_cls: Type[UIComponent], **default_values):
                 if name.startswith('handle_') and callable(member):
                     event_type = name[7:]  # Remove 'handle_' prefix
                     
-                    # Check if this is an action handler (e.g., handle_action_format)
-                    if component.component_type == 'code_editor' and event_type.startswith('action_'):
-                        action_name = event_type[7:]  # Remove 'action_' prefix
-                        
-                        # Ensure we have an action handler registry
-                        if not hasattr(component, 'action_handler_registry') or not component.action_handler_registry:
-                            component.action_handler_registry = ActionHandlerRegistry()
-                        
-                        # Register the action handler
-                        component.action_handler_registry.register_action_handler(action_name, member)
-                        logger.debug(f"Registered action handler {action_name} for {component.component_key}")
-                    else:
-                        # Register as regular event handler
-                        try:
-                            if event_type in component.valid_event_types:
-                                component.event_handlers[event_type] = member
-                                logger.debug(f"Registered event handler {event_type} for {component.component_key}")
-                            else:
-                                logger.warning(f"Invalid event type {event_type} for {component.component_key}")
-                        except ValueError as e:
-                            logger.warning(f"Could not register handler {name}: {str(e)}")
+                    # Register as event handler
+                    try:
+                        # For backward compatibility with old event names
+                        if event_type == 'action_select' or event_type == 'row_action':
+                            component.register_event_handler('row_click', member)
+                        elif event_type.startswith('action_'):
+                            # Convert action_X to X event
+                            event_name = event_type[7:]
+                            component.register_event_handler(event_name, member)
+                        else:
+                            # Standard event
+                            component.register_event_handler(event_type, member)
+                        logger.debug(f"Registered event handler {event_type} for {component.component_key}")
+                    except ValueError as e:
+                        logger.warning(f"Could not register handler {name}: {str(e)}")
             
             return component
         
@@ -255,21 +248,32 @@ def event_handler(event_type: str, component_key: Optional[str] = None):
     return decorator
 
 
-# Helper decorator for attaching action handler metadata
-def component_action_handler(action_name: str, component_key: Optional[str] = None):
+# Helper decorator for component event handling
+def component_event_handler(event_name: str, component_key: Optional[str] = None):
     """
-    Decorator to mark a function as an action handler with metadata.
+    Decorator to mark a function as a component event handler.
     
     Args:
-        action_name: The name of the action this handler will process
+        event_name: The name of the event this handler will process
         component_key: Optional key to specify which component this handler is for
                       (useful when multiple components of same type exist)
     
     Returns:
-        Decorated function with action handler metadata
+        Decorated function with event handler metadata
     """
     def decorator(func):
-        """Set action handler metadata on the function."""
+        """Set component event handler metadata on the function."""
+        # Set metadata for the new event system
+        func._event_handler_metadata = {
+            "event_type": event_name,
+            "component_key": component_key
+        }
+        # For backward compatibility with the old action system, also set action metadata
+        action_name = event_name
+        if event_name == 'row_click':
+            action_name = 'select_seat'
+        elif event_name == 'submit':
+            action_name = 'search_seats'
         func._action_handler_metadata = {
             "action_name": action_name,
             "component_key": component_key

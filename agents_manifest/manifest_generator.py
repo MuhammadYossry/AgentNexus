@@ -294,26 +294,37 @@ def configure_agent_routes(
             request_data: endpoint_info.input_model,
             ei: ActionEndpointInfo = endpoint_info
         ):
+            """Handle component actions with both new event system and legacy action system."""
             try:
-                # Check for UI components and action dispatching
-                if (ei.metadata.ui_components and
-                        hasattr(request_data, 'action') and
-                        request_data.action):
-                        # Get the target component key
-                        target_key = getattr(request_data, 'component_key', 'main_editor')
-                        logger.debug(f"Handling component action: {request_data.action} for {target_key}")
-                        # Prepare data for dispatching
-                        data_dict = request_data.dict() if hasattr(request_data, 'dict') else {}
+                # Check for component actions/events
+                if ei.metadata.ui_components and hasattr(request_data, 'action') and request_data.action:
+                    # Get the target component key
+                    target_key = getattr(request_data, 'component_key', 'main_editor')
+                    logger.debug(f"Handling component action: {request_data.action} for {target_key}")
+                    # Prepare data for dispatching
+                    data_dict = request_data.dict() if hasattr(request_data, 'dict') else {}
+                    try:
+                        # Try to dispatch through global event system
+                        logger.debug(f"Attempting to dispatch action via global_dispatcher")
+                        # For backward compatibility, check both event_handlers and action_handlers
+                        event_handlers = global_dispatcher.event_handlers.get(target_key, {})
+                        action_handlers = getattr(global_dispatcher, 'action_handlers', {}).get(target_key, {})
+                        logger.debug(f"Available event handlers: {event_handlers.keys()}")
+                        logger.debug(f"Available action handlers: {action_handlers.keys() if hasattr(global_dispatcher, 'action_handlers') else []}")
+                        # First, try to handle as an event (new style)
                         try:
-                            # Try to dispatch through global event system
-                            logger.debug(f"Attempting to dispatch action via global_dispatcher")
-                            logger.debug(f"Available action handlers: {global_dispatcher._action_handlers}")
-                            result = await global_dispatcher.dispatch_action(
+                            # Map common action names to event names
+                            event_name = request_data.action
+                            if request_data.action == 'select_seat':
+                                event_name = 'row_click'
+                            elif request_data.action == 'search_seats':
+                                event_name = 'submit'
+                            result = await global_dispatcher.dispatch_event(
                                 component_key=target_key,
-                                action=request_data.action,
-                                data=data_dict
+                                event_name=event_name,
+                                event_data=data_dict
                             )
-                            logger.debug(f"Dispatch result: {result}")
+                            logger.debug(f"Event dispatch result: {result}")
                             # Convert to UIResponse if needed
                             if result and not isinstance(result, UIResponse):
                                 if hasattr(result, 'dict'):
@@ -321,15 +332,33 @@ def configure_agent_routes(
                                 else:
                                     result = UIResponse(data=result, ui_updates=[])
                             return result
-
                         except EventDispatchError as e:
-                            logger.warning(f"Event dispatch failed: {str(e)}")
+                            # Fall back to old action dispatch if event dispatch fails
+                            logger.debug(f"Event dispatch failed, trying action dispatch: {str(e)}")
+                            # Only try action dispatch if we have the attribute
+                            if hasattr(global_dispatcher, 'dispatch_action'):
+                                try:
+                                    result = await global_dispatcher.dispatch_action(
+                                        component_key=target_key,
+                                        action_name=request_data.action,
+                                        action_data=data_dict
+                                    )
+                                    logger.debug(f"Action dispatch result: {result}")
+                                    # Convert to UIResponse if needed
+                                    if result and not isinstance(result, UIResponse):
+                                        if hasattr(result, 'dict'):
+                                            result = UIResponse(data=result.dict(), ui_updates=[])
+                                        else:
+                                            result = UIResponse(data=result, ui_updates=[])
+                                    return result
+                                except Exception as e2:
+                                    logger.warning(f"Action dispatch also failed: {str(e2)}")
+                            else:
+                                logger.warning(f"No action dispatch method available")
+                    except EventDispatchError as e:
+                        # Fall back to original handler if dispatching fails
+                        logger.warning(f"Event dispatch failed: {str(e)}")
                 # Fall back to original handler
-                # If we get here, either:
-                # 1. This is not an action request
-                # 2. Action dispatch failed and no direct handler was found
-                # 3. Direct handler failed
-                # So fall back to the original handler
                 logger.debug(f"Falling back to original handler")
                 result = await ei.handler(request_data)
                 # Handle response template
@@ -428,22 +457,43 @@ def configure_agent(
     action_registry = get_action_registry(name)
     registry.action_registry = action_registry
     workflow_registry = get_workflow_registry(name) if workflows else None
+
     # Register all UI components and their handlers with the global dispatcher
     for action_slug, endpoint_info in action_registry.actions.items():
         if hasattr(endpoint_info.metadata, 'ui_components') and endpoint_info.metadata.ui_components:
             for component in endpoint_info.metadata.ui_components:
                 logger.debug(f"Registering component {component.component_key} from {action_slug}")
-                # Register component with global dispatcher
-                global_dispatcher.register_component_handlers(component)
-                # Explicitly register action handlers
-                if hasattr(component, 'action_handlers') and component.action_handlers:
-                    for action, handler in component.action_handlers.handlers.items():
-                        logger.debug(f"Registering action handler {action} for {component.key}")
-                        global_dispatcher.register_action_handler(
+                # Register the full component, not just handlers
+                global_dispatcher.register_component(component)
+                # Register event handlers if present
+                if hasattr(component, 'event_handlers'):
+                    for event_name, handler in component.event_handlers.items():
+                        logger.debug(f"Registering event handler {event_name} for {component.component_key}")
+                        global_dispatcher.register_event_handler(
                             component_key=component.component_key,
-                            action=action,
+                            event_name=event_name,
                             handler=handler
                         )
+                # Register action handlers if present
+                if hasattr(component, 'action_handlers'):
+                    if isinstance(component.action_handlers, dict):
+                        for action, handler in component.action_handlers.items():
+                            logger.debug(f"Registering action handler {action} for {component.component_key}")
+                            global_dispatcher.register_action_handler(
+                                component_key=component.component_key,
+                                action=action,
+                                handler=handler
+                            )
+                    elif hasattr(component.action_handlers, 'handlers'):
+                        for action, handler in component.action_handlers.handlers.items():
+                            logger.debug(f"Registering action handler {action} for {component.component_key}")
+                            global_dispatcher.register_action_handler(
+                                component_key=component.component_key,
+                                action=action,
+                                handler=handler
+                            )
+
+    # Configure routes
     configure_agent_routes(app, agent_slug, action_registry, workflow_registry)
     if workflow_registry and workflows:
         for workflow in workflows:
@@ -454,9 +504,10 @@ def configure_agent(
         registry.workflow_registry = workflow_registry
 
     agent_registries[agent_slug] = registry
-    # action_registry.actions.clear()
-    
     logger.debug(f"Registered routes: {[route.path for route in app.routes]}")
+    # Log registered handlers for debugging
+    logger.debug(f"Registered event handlers: {global_dispatcher.event_handlers}")
+    logger.debug(f"Registered action handlers: {global_dispatcher.action_handlers}")
     return app
 
 def setup_agent_routes(app: FastAPI):
