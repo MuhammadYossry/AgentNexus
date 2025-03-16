@@ -1,5 +1,5 @@
 # action_manager.py
-from typing import Dict, Callable, Optional, List, Any, Type
+from typing import Dict, Callable, Optional, List, Any, Type, get_type_hints
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, Response
 import inspect
@@ -100,89 +100,126 @@ def agent_action(
         Callable: Decorated action handler
     """
     def decorator(func: Callable) -> Callable:
+        # Process template path if provided
         logger.debug(f"Decorating function: {func.__name__}")
         template_path = None
         if response_template_md is not None:
             template_path = Path(__file__).parent / "templates" / response_template_md
             logger.debug(f"Template path: {template_path}")
+
+        # Process UI components - handle both direct components and factories
+        processed_components = []
+        if ui_components:
+            for component in ui_components:
+                try:
+                    # Handle both direct component instances and factory functions
+                    if callable(component) and not isinstance(component, UIComponent):
+                        try:
+                            component_instance = component()
+                            if isinstance(component_instance, UIComponent):
+                                processed_components.append(component_instance)
+                        except Exception as e:
+                            logger.error(f"Error creating component from factory: {str(e)}")
+                    elif isinstance(component, UIComponent):
+                        processed_components.append(component)
+                    else:
+                        logger.warning(f"Invalid component: {type(component)}")
+                except Exception as e:
+                    logger.error(f"Error processing component: {str(e)}")
+
+            # Register the processed components with the global dispatcher
+            for component in processed_components:
+                global_event_dispatcher.register_component(component)
+                logger.debug(f"Registered component {component.component_key}")
+                # Register component event handlers
+                if hasattr(component, 'event_handlers'):
+                    for event_type, handler in component.event_handlers.items():
+                        logger.debug(f"Registered event handler for {component.component_key}.{event_type}")
+
+        # Extract function signature information
         sig = inspect.signature(func)
+        type_hints = get_type_hints(func)
+        # Get input model
         input_model = next(
             (param.annotation for param in sig.parameters.values() 
              if hasattr(param.annotation, 'model_json_schema')),
             None
         )
-        output_model = (
-            func.__annotations__.get('return').__args__[0] 
-            if hasattr(func.__annotations__.get('return', None), '__origin__')
-            else func.__annotations__.get('return')
-        )
+        # Get output model
+        output_model = type_hints.get('return')
+        if hasattr(output_model, '__origin__'):
+            output_model = output_model.__args__[0]
+        # Create action slug
         action_slug = slugify(name)
-        # Register UI components with global dispatcher
-        if ui_components:
-            for component in ui_components:
-                # Register component and its handlers with the global dispatcher
-                global_event_dispatcher.register_component_handlers(component)
-                # Additional registration for action handlers
-                if hasattr(component, 'action_handlers') and component.action_handlers:
-                    for action, handler in component.action_handlers.handlers.items():
-                        global_event_dispatcher.register_action_handler(
-                            component_key=component.key,
-                            action=action,
-                            handler=handler
-                        )
-                    # Register default handler if present
-                    if component.action_handlers.default_handler:
-                        global_event_dispatcher.register_action_handler(
-                            component_key=component.key,
-                            action='__default__',
-                            handler=component.action_handlers.default_handler
-                        )
-        # Wrap the original function to handle UI components and event dispatching
+
+        # Create the wrapper function that handles events and dispatching
         @wraps(func)
         async def wrapper(*args, **kwargs):
             try:
                 # Get input data
                 input_data = args[0] if args else next(iter(kwargs.values()), None)
-                logger.debug(f"Input data received: {input_data}")
+                logger.debug(f"Input data received: {type(input_data)}")
 
-                # Handle UI component registration
-                if ui_components:
-                    for component in ui_components:
-                        global_event_dispatcher.register_component_handlers(component)
-                        logger.debug(f"Registered handlers for component: {component.key}")
-
-                # Check for event dispatching
-                if hasattr(input_data, 'event') and input_data.event:
+                # Check for component event handling
+                if input_data and hasattr(input_data, 'action') and input_data.action:
                     target_component_key = getattr(input_data, 'component_key', None)
-                    if not target_component_key:
-                        logger.warning("No component_key provided for event dispatch")
-                        raise HTTPException(status_code=400, detail="Missing component_key for event")
-
-                    try:
-                        # Dispatch event through global dispatcher
-                        result = await global_event_dispatcher.dispatch_event(
-                            component_key=target_component_key,
-                            event_name=input_data.event,
-                            event_data=input_data.dict() if hasattr(input_data, 'dict') else input_data
-                        )
-                        logger.debug(f"Event dispatch result: {result}")
-                        # Convert to UIResponse if needed
-                        if result:
-                            if isinstance(result, dict):
-                                ui_updates = result.pop('ui_updates', []) if isinstance(result.get('ui_updates'), list) else []
-                                return UIResponse(data=result, ui_updates=ui_updates)
-                            elif not isinstance(result, UIResponse):
-                                return UIResponse(data=result, ui_updates=[])
-                        return result
-
-                    except Exception as e:
-                        logger.error(f"Event dispatch failed: {str(e)}")
-                        # Fall through to regular function execution
-
-                # Execute original function
+                    # Find appropriate component if no key provided
+                    if not target_component_key and processed_components:
+                        for component in processed_components:
+                            if (hasattr(component, 'supported_events') and
+                                input_data.action in component.supported_events):
+                                target_component_key = component.component_key
+                                break
+                            elif (hasattr(component, 'available_actions') and
+                                  input_data.action in component.available_actions):
+                                target_component_key = component.component_key
+                                break
+                    # Try to dispatch the event if we have a component key
+                    if target_component_key:
+                        try:
+                            event_data = input_data.dict() if hasattr(input_data, 'dict') else vars(input_data)
+                            # Map action to event name if needed
+                            event_name = input_data.action
+                            if input_data.action == 'select_seat':
+                                event_name = 'row_click'
+                            elif input_data.action == 'search_seats':
+                                event_name = 'submit'
+                            # Try event dispatch
+                            try:
+                                result = await global_event_dispatcher.dispatch_event(
+                                    component_key=target_component_key,
+                                    event_name=event_name,
+                                    event_data=event_data
+                                )
+                                logger.debug(f"Event dispatch result type: {type(result)}")
+                                # Process the result
+                                if result:
+                                    # Try to convert to the expected output model if possible
+                                    if isinstance(result, output_model):
+                                        return result
+                                    elif hasattr(output_model, 'parse_obj'):
+                                        return output_model.parse_obj(result)
+                                    elif hasattr(output_model, 'model_validate'):
+                                        return output_model.model_validate(result)
+                                    # Format result as UIResponse if needed
+                                    if action_type == ActionType.CUSTOM_UI:
+                                        if isinstance(result, UIResponse):
+                                            return result
+                                        elif isinstance(result, dict):
+                                            ui_updates = result.pop('ui_updates', []) if isinstance(result.get('ui_updates'), list) else []
+                                            return UIResponse(data=result, ui_updates=ui_updates)
+                                        else:
+                                            return UIResponse(data=result, ui_updates=[])
+                                    return result
+                            except EventDispatchError as e:
+                                logger.warning(f"Event dispatch failed: {str(e)}")
+                                # We'll fall through to the regular handler
+                        except Exception as e:
+                            logger.error(f"Error in event handling: {str(e)}")
+                            # Continue to regular function execution on error
+                # Execute original function if no event was handled
                 result = await func(*args, **kwargs)
-
-                # Handle response template
+                # Handle response template if it exists
                 if template_path and template_path.exists():
                     template_content = template_path.read_text()
                     try:
@@ -192,19 +229,19 @@ def agent_action(
                     except Exception as e:
                         logger.error(f"Template rendering failed: {str(e)}")
                         return result
-
                 # Ensure proper response structure for UI actions
-                if endpoint_info.metadata.action_type == ActionType.CUSTOM_UI:
+                if action_type == ActionType.CUSTOM_UI:
                     if isinstance(result, UIResponse):
                         return result
                     elif isinstance(result, dict) and 'ui_updates' in result:
                         return UIResponse(**result)
                     else:
-                        return UIResponse(data=result, ui_updates=[])
+                        return UIResponse(data=result, ui_updates=[])    
                 return result
             except Exception as e:
                 logger.error(f"Error in action handler: {str(e)}", exc_info=True)
                 raise HTTPException(status_code=500, detail=str(e))
+        # Create the endpoint info
         endpoint_info = ActionEndpointInfo(
             metadata=ActionMetadata(
                 action_type=action_type,
@@ -213,17 +250,20 @@ def agent_action(
                 response_template_md=str(template_path) if template_path else None,
                 workflow_id=workflow_id,
                 step_id=step_id,
-                ui_components=ui_components or [],
+                ui_components=processed_components,
                 allow_dynamic_ui=allow_dynamic_ui
             ),
             input_model=input_model,
             output_model=output_model,
-            handler=func,
+            handler=wrapper,  # Use the wrapper as the handler
             schema_definitions=schema_definitions,
             examples=examples
         )
+        # Register the action
         get_action_registry(agent_config.name).register_action(action_slug, endpoint_info)
-        wrapper.ui_components = ui_components
+        # Store UI components on the function for reference
+        wrapper.ui_components = processed_components
+        # Return the original function for decoration chaining
         return func
     return decorator
 

@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 import datetime
 from loguru import logger
 from agents_manifest.base_types import ActionType, Capability, AgentConfig, UIComponentUpdate
-from agents_manifest.agent_action_integration import enhanced_agent_action
+from agents_manifest.action_manager import agent_action
 
 from agents.models.flight_agent import (
     SeatClass, SeatClassChoices, FlightDetails, SeatPreference, FlightSearchInput, FlightSearchOutput,
@@ -45,7 +45,7 @@ flight_agent_app = AgentConfig(
     capabilities=FLIGHT_CAPABILITIES
 )
 
-@enhanced_agent_action(
+@agent_action(
     agent_config=flight_agent_app,
     action_type=ActionType.GENERATE,
     name="Search Flights",
@@ -108,7 +108,7 @@ async def search_flights(input_data: FlightSearchInput) -> FlightSearchOutput:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
   
-@enhanced_agent_action(
+@agent_action(
     agent_config=flight_agent_app,
     action_type=ActionType.GENERATE,
     name="Book Flight",
@@ -166,7 +166,7 @@ async def book_flight(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@enhanced_agent_action(
+@agent_action(
     agent_config=flight_agent_app,
     action_type=ActionType.GENERATE,
     name="Plan Travel",
@@ -301,7 +301,7 @@ async def plan_travel(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@enhanced_agent_action(
+@agent_action(
     agent_config=flight_agent_app,
     action_type=ActionType.CUSTOM_UI,
     name="Interactive Seat Selection",

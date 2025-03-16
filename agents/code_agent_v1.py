@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from pathlib import Path
-from datetime import datetime
 import json
 import black
+import datetime
 from typing import List, Any
 from loguru import logger
 
@@ -13,7 +13,7 @@ from agents.models.code_agent_v1 import (
     CodeReviewInput, CodeReviewOutput
 )
 from agents_manifest.base_types import AgentConfig, Capability, ActionType
-from agents_manifest.agent_action_integration import enhanced_agent_action
+from agents_manifest.action_manager import agent_action
 from agents.ui_components.code_agent_v1 import main_editor, analysis_output
 from agents.llm_client import create_llm_client
 
@@ -60,7 +60,7 @@ code_agent_v1_app = AgentConfig(
     base_path="/v1/code_agent",
     capabilities=CODE_CAPABILITIES
 )
-@enhanced_agent_action(
+@agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.TALK,
     name="Chat with Python Assistant",
@@ -88,7 +88,7 @@ async def chat_with_agent(input_data: ChatInput) -> ChatOutput:
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@enhanced_agent_action(
+@agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.GENERATE,
     name="Generate Python Code",
@@ -118,7 +118,7 @@ async def generate_code(input_data: GenerateCodeInput) -> GenerateCodeOutput:
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@enhanced_agent_action(
+@agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.GENERATE,
     name="Improve Python Code",
@@ -530,7 +530,7 @@ Output only JSON following the questionnaire_form format."""
     # Same response parsing as before
     return parse_questionnaire_response(response)
 
-@enhanced_agent_action(
+@agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.QUESTION,
     name="Collect Requirements",
@@ -684,7 +684,7 @@ async def collect_requirements(input_data: CollectRequirementsInput) -> CollectR
         logger.error(f"Error in collect_requirements: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@enhanced_agent_action(
+@agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.CUSTOM_UI,
     name="Interactive Code Review",

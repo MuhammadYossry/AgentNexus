@@ -38,7 +38,6 @@ def calculate_statistics(numbers):
         median = (sorted_nums[len(numbers)//2] + sorted_nums[len(numbers)//2 - 1]) / 2
     else:
         median = sorted_nums[len(numbers)//2]
-    
     return {"total": total, "average": avg, "median": median}
 
 def process_data(data_list):
