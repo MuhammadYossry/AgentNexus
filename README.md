@@ -2,27 +2,27 @@
 
 ## 🚀 Core Purpose
 
-AgentHub is a powerful Python framework that simplifies the creation of intelligent agents with rich, interactive user interfaces and automatic API generation. Build sophisticated multi-step workflows with declarative syntax and seamless state management.
+AgentHub is a powerful Python framework that simplifies the creation of intelligent agents with rich, interactive user interfaces and automatic Agent manifest generation, enabling seamless discovery, deployment, and interaction across different platforms. 
 
 ## 🌟 Key Features
 
 ### 🏗️ Advanced Agent Architecture
 - **Declarative Development**: Create complex agents using intuitive Python decorators
-- **Multi-Action Support**: Define multiple capabilities within a single agent
-- **Workflow-Driven Design**: Build sophisticated multi-step processes with proper state transitions
+- **Multi-Action Support**: Define multiple agent actions endpoints within a single agent
+- **Workflow-Driven Design**: Build multi-step UI workflows
 
 ### 🖥️ Event-Driven UI System
 - **Rich Component Library**: Pre-built components for tables, forms, code editors, and markdown displays
-- **Automatic Event Handling**: Built-in handlers for common events with standardized responses
-- **Context-Aware State Management**: Maintain and pass state across workflow steps
+- **Automatic Event Handling**: write your components event handlers with ease
+- **Context-Aware State Management**: Maintain and pass state and context across workflow steps
+- **Session Management**: Maintain context across multiple interaction workflows
 
-### 🔄 Powerful Workflow Capabilities
-- **Step Transitions**: Define workflows with conditional transitions between steps
-- **Session Management**: Maintain context across multiple interactions
-- **Response Standardization**: Consistent WorkflowStepResponse objects for reliable operation
+### 🔍 Comprehensive Manifest Generation
+- **Agent Specification Protocol**: Standardized JSON schema defining agents, actions, workflows, and UI components
+- **Cross-Platform Compatibility**: Agents can be consumed by any platform supporting the manifest specification
+- **Distributed Architecture Support**: Manifests enable decentralized agent discovery and execution
 
 ### 🔍 API and Documentation Generation
-- **Automatic Manifest Files**: Generate comprehensive machine-readable agent manifests
 - **OpenAPI Integration**: Instant, standards-compliant API documentation
 - **Self-Documenting Endpoints**: Complete metadata about capabilities, actions, and workflows
 
