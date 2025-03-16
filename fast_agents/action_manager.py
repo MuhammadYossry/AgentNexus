@@ -7,9 +7,9 @@ from functools import wraps
 from loguru import logger
 from pathlib import Path
 from jinja2 import Template
-from agents_manifest.base_types import ActionType, AgentConfig, slugify, UIResponse
-from agents_manifest.ui_components import UIComponent
-from agents_manifest.event_dispatcher import global_event_dispatcher
+from fast_agents.base_types import ActionType, AgentConfig, slugify, UIResponse
+from fast_agents.ui_components import UIComponent
+from fast_agents.event_dispatcher import global_event_dispatcher
 
 class ActionMetadata(BaseModel):
     """Metadata container for capturing comprehensive information about an agent action."""

@@ -1,4 +1,4 @@
-from agents_manifest.ui_components import CodeEditorComponent, MarkdownComponent, FormComponent, FormField, TableComponent, TableColumn
+from fast_agents.ui_components import CodeEditorComponent, MarkdownComponent, FormComponent, FormField, TableComponent, TableColumn
 from agents.ui_handlers.code_agent_v2 import (
     handle_code_format,
     handle_code_save,

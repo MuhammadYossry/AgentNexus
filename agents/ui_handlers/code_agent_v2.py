@@ -10,8 +10,8 @@ import re
 from fastapi import HTTPException
 from loguru import logger
 
-from agents_manifest.base_types import WorkflowStepResponse, UIComponentUpdate
-from agents_manifest.ui_components import UIComponent
+from fast_agents.base_types import WorkflowStepResponse, UIComponentUpdate
+from fast_agents.ui_components import UIComponent
 
 # Define standard context keys for consistent reference
 CONTEXT_KEYS = {

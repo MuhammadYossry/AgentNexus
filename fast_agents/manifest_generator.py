@@ -8,14 +8,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from jinja2 import Template
 
-from agents_manifest.base_types import (
+from fast_agents.base_types import (
     Capability, ActionType, WorkflowStepType, AgentConfig, slugify,
     Workflow, WorkflowStep, WorkflowTransition, WorkflowDataMapping,
     UIResponse
 )
-from agents_manifest.action_manager import ActionRegistry, get_action_registry, ActionEndpointInfo
-from agents_manifest.workflow_manager import WorkflowRegistry, configure_workflow_routes, get_workflow_registry
-from agents_manifest.event_dispatcher import global_event_dispatcher, EventDispatchError
+from fast_agents.action_manager import ActionRegistry, get_action_registry, ActionEndpointInfo
+from fast_agents.workflow_manager import WorkflowRegistry, configure_workflow_routes, get_workflow_registry
+from fast_agents.event_dispatcher import global_event_dispatcher, EventDispatchError
 
 class AgentManager:
     """Manages the lifecycle and configuration of multiple agents within a FastAPI application.

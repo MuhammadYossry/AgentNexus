@@ -7,8 +7,8 @@ from datetime import datetime
 from fastapi import HTTPException
 from loguru import logger
 
-from agents_manifest.base_types import UIComponentUpdate, UIResponse
-from agents_manifest.ui_components import UIComponent
+from fast_agents.base_types import UIComponentUpdate, UIResponse
+from fast_agents.ui_components import UIComponent
 
 
 async def handle_code_analyze(code: str, language: str = "python", **kwargs) -> UIResponse:

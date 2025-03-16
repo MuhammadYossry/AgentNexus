@@ -1,16 +1,16 @@
 from typing import Dict, Callable, Optional, List, Tuple, Any
 from fastapi import FastAPI, HTTPException
 from functools import wraps
-from agents_manifest.session_manager import session_manager
+from fast_agents.session_manager import session_manager
 from loguru import logger
 import inspect
-from agents_manifest.base_types import (
+from fast_agents.base_types import (
     AgentConfig, Workflow, WorkflowStepMetadata,
     ActionType, slugify, UIComponentUpdate, WorkflowStepResponse
 )
-from agents_manifest.ui_components import UIComponent
-from agents_manifest.session_manager import SessionManager
-from agents_manifest.event_dispatcher import global_event_dispatcher, EventDispatchError
+from fast_agents.ui_components import UIComponent
+from fast_agents.session_manager import SessionManager
+from fast_agents.event_dispatcher import global_event_dispatcher, EventDispatchError
 
 # =========================================================================
 # DEFAULT EVENT HANDLERS AND REGISTRATION

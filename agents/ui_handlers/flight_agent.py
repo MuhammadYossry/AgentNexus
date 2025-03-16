@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 import random
 import datetime
 from loguru import logger
-from agents_manifest.base_types import UIResponse, UIComponentUpdate
+from fast_agents.base_types import UIResponse, UIComponentUpdate
 
 async def handle_form_submit(
     action: str,  # Will receive 'search_seats'

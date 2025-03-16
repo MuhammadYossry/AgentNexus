@@ -1,4 +1,4 @@
-from agents_manifest.ui_components import CodeEditorComponent, MarkdownComponent
+from fast_agents.ui_components import CodeEditorComponent, MarkdownComponent
 from agents.ui_handlers.code_agent_v1 import handle_code_analyze, handle_code_format
 
 main_editor = CodeEditorComponent(

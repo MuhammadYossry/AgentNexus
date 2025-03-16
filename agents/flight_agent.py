@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 import datetime
 from loguru import logger
-from agents_manifest.base_types import ActionType, Capability, AgentConfig, UIComponentUpdate
-from agents_manifest.action_manager import agent_action
+from fast_agents.base_types import ActionType, Capability, AgentConfig, UIComponentUpdate
+from fast_agents.action_manager import agent_action
 
 from agents.models.flight_agent import (
     SeatClass, SeatClassChoices, FlightDetails, SeatPreference, FlightSearchInput, FlightSearchOutput,

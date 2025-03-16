@@ -2,18 +2,17 @@
 from typing import List, Dict, Any, Optional, Callable, Union
 from loguru import logger
 import re
-
-from pydantic import BaseModel
-from agents_manifest.base_types import (
+from fast_agents.base_types import (
     AgentConfig, Capability, UIComponentUpdate, WorkflowStepResponse,
     Workflow, WorkflowStep, WorkflowStepType
 )
-from agents_manifest.manifest_generator import configure_agent, ActionType
-from agents_manifest.ui_components import (
+from fast_agents.manifest_generator import configure_agent, ActionType
+from fast_agents.ui_components import (
     CodeEditorComponent, MarkdownComponent, TableComponent,
     FormComponent, TableColumn, FormField
 )
-from agents_manifest.workflow_manager import workflow_step
+from fast_agents.workflow_manager import workflow_step
+
 from agents.ui_components.code_agent_v2 import (
     code_input, language_selector, handle_analyze_continue_submit,
     code_display, analysis_result, improved_code, improvement_notes,

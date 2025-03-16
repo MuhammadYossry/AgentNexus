@@ -5,6 +5,8 @@ import black
 import datetime
 from typing import List, Any
 from loguru import logger
+from fast_agents.base_types import AgentConfig, Capability, ActionType
+from fast_agents.action_manager import agent_action
 
 from agents.models.code_agent_v1 import (
     ChatInput, ChatOutput, GenerateCodeInput, GenerateCodeOutput,
@@ -12,8 +14,6 @@ from agents.models.code_agent_v1 import (
     CollectRequirementsInput, CollectRequirementsOutput,
     CodeReviewInput, CodeReviewOutput
 )
-from agents_manifest.base_types import AgentConfig, Capability, ActionType
-from agents_manifest.action_manager import agent_action
 from agents.ui_components.code_agent_v1 import main_editor, analysis_output
 from agents.llm_client import create_llm_client
 

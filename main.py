@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from agents_manifest.base_types import Capability
-from agents_manifest.manifest_generator import AgentManager, configure_agent_routes, configure_agent
+from fast_agents.manifest_generator import AgentManager, configure_agent
 
 # Import agent functions first to ensure decorators run
 from agents.flight_agent import flight_agent_app

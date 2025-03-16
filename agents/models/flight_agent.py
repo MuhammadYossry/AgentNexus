@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Literal, Optional
 from enum import Enum
 import datetime
 from pydantic import BaseModel, Field
-from agents_manifest.base_types import UIResponse, UIComponentUpdate
+from fast_agents.base_types import UIResponse, UIComponentUpdate
 
 class SeatClassChoices(str, Enum):
     """Available seat classes."""

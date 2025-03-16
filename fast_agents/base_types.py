@@ -6,7 +6,7 @@ from datetime import datetime
 import re
 from pydantic import BaseModel, Field
 
-from agents_manifest.ui_components import UIComponent
+from fast_agents.ui_components import UIComponent
 
 class ActionType(str, Enum):
     """Enumerate the types of actions an agent can perform.
