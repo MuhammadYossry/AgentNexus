@@ -162,7 +162,7 @@ class WorkflowStep(BaseModel):
     id: str
     type: Optional[WorkflowStepType] = WorkflowStepType.UI_STEP
     action: Optional[str] = None
-    transitions: List[WorkflowTransition] = Field(default_factory=list)
+    transitions: Optional[List[WorkflowTransition]] = None 
 
 class Workflow(BaseModel):
     """Represents a complete workflow definition.

@@ -3,20 +3,18 @@ from pathlib import Path
 from datetime import datetime
 import json
 import black
-from typing import List, Dict, Any
+from typing import List, Any
+from loguru import logger
 
 from agents.models.code_agent_v1 import (
     ChatInput, ChatOutput, GenerateCodeInput, GenerateCodeOutput,
     ImproveCodeInput, ImproveCodeOutput, TestCodeInput, TestCodeOutput,
-    DeployPreviewInput, DeployPreviewOutput,
-    CollectRequirementsInput, CollectRequirementsOutput, RequirementsPhase,
+    CollectRequirementsInput, CollectRequirementsOutput,
     CodeReviewInput, CodeReviewOutput
 )
-from agents_manifest.base_types import AgentConfig, Capability, UIComponentUpdate, UIResponse
-from agents_manifest.manifest_generator import configure_agent, ActionType
-# from agents_manifest.action_manager import agent_action
+from agents_manifest.base_types import AgentConfig, Capability, ActionType
 from agents_manifest.agent_action_integration import enhanced_agent_action
-from agents_manifest.ui_components import CodeEditorComponent, MarkdownComponent, ActionHandlerMap
+from agents.ui_components.code_agent_v1 import main_editor, analysis_output
 from agents.llm_client import create_llm_client
 
 AGENT_TEMPLATE = Path(__file__).parent / "templates" / "agent.html"
@@ -62,68 +60,6 @@ code_agent_v1_app = AgentConfig(
     base_path="/v1/code_agent",
     capabilities=CODE_CAPABILITIES
 )
-
-async def _generate_code_from_requirements(code_requirements: Any) -> str:
-    """Generate code based on requirements using LLM."""
-    prompt = f"Generate Python/{code_requirements.framework} code for: {code_requirements.description}. Functions: {', '.join(code_requirements.required_functions)}"
-
-    response = await llm_client.complete(
-        prompt=prompt,
-        system_message="You are an expert Python developer. Generate clean, efficient code following PEP 8 standards.",
-        temperature=0.3
-    )
-    return response.content
-
-async def _generate_tests(code: str, test_instructions: List[Any]) -> str:
-    """Generate test cases using LLM."""
-    prompt = f"""
-    Generate Python test cases for the following code:
-    {code}
-
-    Test requirements:
-    {[instr.description for instr in test_instructions]}
-    """
-
-    response = await llm_client.complete(
-        prompt=prompt,
-        system_message="You are an expert in Python testing. Generate comprehensive test cases.",
-        temperature=0.2
-    )
-    return response.content
-
-async def _generate_documentation(code: str, level: str) -> str:
-    """Generate documentation using LLM."""
-    prompt = f"""
-    Generate {level} documentation for the following Python code:
-    {code}
-    """
-
-    response = await llm_client.complete(
-        prompt=prompt,
-        system_message="You are a technical documentation expert. Generate clear and comprehensive documentation.",
-        temperature=0.3
-    )
-    return response.content
-
-async def _apply_code_changes(change: Any) -> str:
-    """Apply code improvements using LLM."""
-    prompt = f"""
-    Improve the following Python code according to these requirements:
-    Change type: {change.type}
-    Description: {change.description}
-    Priority: {change.priority}
-
-    Code to improve:
-    {change.target or "No code provided"}
-    """
-
-    response = await llm_client.complete(
-        prompt=prompt,
-        system_message="You are an expert Python developer. Improve the code while maintaining its functionality.",
-        temperature=0.2
-    )
-    return response.content
-
 @enhanced_agent_action(
     agent_config=code_agent_v1_app,
     action_type=ActionType.TALK,
@@ -222,19 +158,75 @@ async def improve_code(input_data: ImproveCodeInput) -> ImproveCodeOutput:
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-import logging
+async def _generate_code_from_requirements(code_requirements: Any) -> str:
+    """Generate code based on requirements using LLM."""
+    prompt = f"Generate Python/{code_requirements.framework} code for: {code_requirements.description}. Functions: {', '.join(code_requirements.required_functions)}"
 
-logger = logging.getLogger(__name__)
+    response = await llm_client.complete(
+        prompt=prompt,
+        system_message="You are an expert Python developer. Generate clean, efficient code following PEP 8 standards.",
+        temperature=0.3
+    )
+    return response.content
+
+async def _generate_tests(code: str, test_instructions: List[Any]) -> str:
+    """Generate test cases using LLM."""
+    prompt = f"""
+    Generate Python test cases for the following code:
+    {code}
+
+    Test requirements:
+    {[instr.description for instr in test_instructions]}
+    """
+
+    response = await llm_client.complete(
+        prompt=prompt,
+        system_message="You are an expert in Python testing. Generate comprehensive test cases.",
+        temperature=0.2
+    )
+    return response.content
+
+async def _generate_documentation(code: str, level: str) -> str:
+    """Generate documentation using LLM."""
+    prompt = f"""
+    Generate {level} documentation for the following Python code:
+    {code}
+    """
+
+    response = await llm_client.complete(
+        prompt=prompt,
+        system_message="You are a technical documentation expert. Generate clear and comprehensive documentation.",
+        temperature=0.3
+    )
+    return response.content
+
+async def _apply_code_changes(change: Any) -> str:
+    """Apply code improvements using LLM."""
+    prompt = f"""
+    Improve the following Python code according to these requirements:
+    Change type: {change.type}
+    Description: {change.description}
+    Priority: {change.priority}
+
+    Code to improve:
+    {change.target or "No code provided"}
+    """
+
+    response = await llm_client.complete(
+        prompt=prompt,
+        system_message="You are an expert Python developer. Improve the code while maintaining its functionality.",
+        temperature=0.2
+    )
+    return response.content
+
 
 def parse_questionnaire_response(response: str) -> dict:
     """Clean and extract JSON from various response formats."""
     try:
         # Split response into questionnaire and JSON parts
         content = response.content
-
         #  Extract JSON from response
         content = response.content
-
         # If response is wrapped in markdown code blocks, extract just the JSON
         if "```json" in content:
             json_str = content.split("```json")[1].split("```")[0].strip()
@@ -242,10 +234,8 @@ def parse_questionnaire_response(response: str) -> dict:
             json_str = content.split("```")[1].strip()
         else:
             json_str = content.strip()
-
         # Parse the JSON
         form_structure = json.loads(json_str)
-
         # Validate expected structure
         if not isinstance(form_structure, dict):
             raise ValueError("Response is not a JSON object")
@@ -253,10 +243,8 @@ def parse_questionnaire_response(response: str) -> dict:
             raise ValueError("Response missing questionnaire_form key")
         if "steps" not in form_structure["questionnaire_form"]:
             raise ValueError("Response missing steps in questionnaire_form")
-
         # Return just the form structure
         return form_structure["questionnaire_form"]
-
     except json.JSONDecodeError as e:
         logger.error(f"JSON decode error: {str(e)}")
         logger.error(f"Raw response: {content}")
@@ -297,7 +285,6 @@ async def _generate_requirements_form(message: str) -> dict:
       }
     }
     """
-
     # Define the prompt without deeply nested f-strings
     prompt = f"""You are a requirements gathering expert. Analyze this project description and generate a detailed requirements questionnaire:
 
@@ -696,117 +683,6 @@ async def collect_requirements(input_data: CollectRequirementsInput) -> CollectR
     except Exception as e:
         logger.error(f"Error in collect_requirements: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
-
-
-async def handle_code_analyze(code: str, language: str = "python", **kwargs) -> UIResponse:
-    """Handler for code analysis action."""
-    try:
-        sample_analysis = f"""
-## Code Analysis Results
-
-### Overview
-- Lines of code: {len(code.splitlines())}
-- Language: {language}
-
-### Key Findings
-✅ Clear function names
-⚠️ Missing type hints
-❌ Insufficient documentation
-
-### Suggestions
-1. Add type hints to function parameters
-2. Include docstrings for all functions
-3. Consider breaking down complex functions
-
-### Code Style
-- PEP 8 compliant: Yes
-- Complexity score: Medium
-        """
-
-        return UIResponse(
-            data={
-                "analysis_complete": True,
-                "timestamp": datetime.now().isoformat()
-            },
-            ui_updates=[
-                UIComponentUpdate(
-                    key="analysis_output",
-                    state={"content": sample_analysis}
-                )
-            ]
-        )
-    except Exception as e:
-        logger.error(f"Error in code analysis: {str(e)}")
-        return UIResponse(
-            data={"error": str(e)},
-            ui_updates=[
-                UIComponentUpdate(
-                    key="analysis_output",
-                    state={"content": f"## Error\n\n{str(e)}"}
-                )
-            ]
-        )
-
-async def handle_code_format(code: str, language: str = "python", **kwargs) -> UIResponse:
-    """Handler for code formatting action."""
-    try:
-        # Format code using black if it's Python
-        if language.lower() == "python":
-            formatted_code = black.format_str(code, mode=black.FileMode())
-        else:
-            formatted_code = code
-        return UIResponse(
-            data={
-                "format_complete": True,
-                "timestamp": datetime.now().isoformat()
-            },
-            ui_updates=[
-                UIComponentUpdate(
-                    key="main_editor",
-                    state={"content": formatted_code}
-                ),
-                UIComponentUpdate(
-                    key="analysis_output",
-                    state={"content": "## Formatting Complete\n\nCode has been formatted."}
-                )
-            ]
-        )
-    except Exception as e:
-        logger.error(f"Error in code formatting: {str(e)}")
-        return UIResponse(
-            data={"error": str(e)},
-            ui_updates=[
-                UIComponentUpdate(
-                    key="analysis_output",
-                    state={"content": f"## Error\n\n{str(e)}"}
-                )
-            ]
-        )
-
-# Create the components directly
-main_editor = CodeEditorComponent(
-    component_key="main_editor",
-    title="Source Code",
-    programming_language="python",
-    editor_content="# Enter your Python code here\n\ndef example_function():\n    print('Hello, world!')",
-    available_actions=["analyze", "format"],
-    editor_options={
-        "minimap": {"enabled": True},
-        "lineNumbers": "on",
-        "folding": True,
-        "formatOnPaste": True,
-    },
-    event_handlers={  # Add event handlers directly
-        "analyze": handle_code_analyze,
-        "format": handle_code_format
-    }
-)
-analysis_output = MarkdownComponent(
-    component_key="analysis_output",
-    title="Analysis Results",
-    markdown_content="*Submit code for analysis by clicking action buttons*",
-    content_style={"padding": "1rem", "backgroundColor": "#f5f5f5"}
-)
 
 @enhanced_agent_action(
     agent_config=code_agent_v1_app,

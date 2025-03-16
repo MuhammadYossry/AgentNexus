@@ -6,7 +6,7 @@ from agents_manifest.manifest_generator import AgentManager, configure_agent_rou
 # Import agent functions first to ensure decorators run
 from agents.flight_agent import flight_agent_app
 from agents.code_agent_v1 import code_agent_v1_app
-# from agents.code_agent_v2 import code_assistant_v2_app
+from agents.code_agent_v2 import code_agent_v2_app
 
 def add_cors_middleware(app: FastAPI):
     app.add_middleware(
@@ -23,7 +23,7 @@ def create_app():
     agent_manager = AgentManager(base_url="http://localhost:9200")
     agent_manager.add_agent(flight_agent_app)
     agent_manager.add_agent(code_agent_v1_app)
-    # agent_manager.add_agent(code_assistant_v2_app)
+    agent_manager.add_agent(code_agent_v2_app)
     agent_manager.setup_agents(app)
     return app
 

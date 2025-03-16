@@ -1,22 +1,21 @@
 # manifest_generator.py
 from typing import List, Optional, Dict, Any, Callable, Type
+from pathlib import Path
+import inspect
+from loguru import logger
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
-from jinja2 import Environment, FileSystemLoader, Template
-from pathlib import Path
-import sys
-import inspect
-from loguru import logger
+from jinja2 import Template
+
 from agents_manifest.base_types import (
     Capability, ActionType, WorkflowStepType, AgentConfig, slugify,
     Workflow, WorkflowStep, WorkflowTransition, WorkflowDataMapping,
     UIResponse
 )
-from agents_manifest.action_manager import ActionRegistry, agent_action, get_action_registry, ActionEndpointInfo
-from agents_manifest.workflow_manager import WorkflowRegistry, configure_workflow_routes, workflow_step, get_workflow_registry
-from agents_manifest.event_dispatcher import ComponentEventDispatcher, EventDispatchError
-global_dispatcher = ComponentEventDispatcher()
+from agents_manifest.action_manager import ActionRegistry, get_action_registry, ActionEndpointInfo
+from agents_manifest.workflow_manager import WorkflowRegistry, configure_workflow_routes, get_workflow_registry
+from agents_manifest.event_dispatcher import global_event_dispatcher, EventDispatchError
 
 class AgentManager:
     """Manages the lifecycle and configuration of multiple agents within a FastAPI application.
@@ -178,91 +177,124 @@ class AgentRegistry:
             - Supports dynamic template loading
         """
         logger.debug(f"Generating manifest for agent: {self.name}")
-        logger.debug(f"Action registry contents: {self.action_registry.actions}")
+        logger.debug(f"Action registry contents: {self.action_registry.actions if self.action_registry else None}")
+        # Process actions
         actions = []
-        for action_slug, endpoint_info in self.action_registry.actions.items():
-            logger.debug(f"Processing action: {action_slug}")
-            logger.debug(f"Endpoint info: {endpoint_info.metadata}")
-            template_content = None
-            if endpoint_info.metadata.response_template_md:
-                try:
-                    template_path = Path(endpoint_info.metadata.response_template_md)
-                    if not template_path.is_absolute():
-                        # Try relative to project root first
-                        project_root = Path(__file__).parent.parent
-                        template_path = project_root / "agents_manifest" / "templates" / template_path.name
-                    
-                    if template_path.exists():
-                        template_content = template_path.read_text()
-                        logger.debug(f"Loaded template from {template_path}")
-                    else:
-                        logger.warning(f"Template not found at {template_path}")
-                except Exception as e:
-                    logger.error(f"Error loading template: {str(e)}")
-            action_data = {
-                "name": endpoint_info.metadata.name,
-                "slug": action_slug,
-                "actionType": endpoint_info.metadata.action_type.value,
-                "path": f"/agents/{self.slug}/actions/{action_slug}",
-                "method": "POST",
-                "inputSchema": endpoint_info.input_model.model_json_schema(),
-                "outputSchema": endpoint_info.output_model.model_json_schema(),
-                "description": endpoint_info.metadata.description,
-                "isMDResponseEnabled": template_content is not None,
-                "examples": endpoint_info.examples or {"validRequests": []}
-            }
-            if template_content:
-                action_data["responseTemplateMD"] = template_content
-            if hasattr(endpoint_info.metadata, 'ui_components') and endpoint_info.metadata.ui_components:
-                action_data["uiComponents"] = [
-                    comp.dict(exclude_none=True)
-                    for comp in endpoint_info.metadata.ui_components
-                ]
-            actions.append(action_data)
+        if self.action_registry:
+            for action_slug, endpoint_info in self.action_registry.actions.items():
+                logger.debug(f"Processing action: {action_slug}")
+                logger.debug(f"Endpoint info: {endpoint_info.metadata}")
+                template_content = None
+                if endpoint_info.metadata.response_template_md:
+                    try:
+                        template_path = Path(endpoint_info.metadata.response_template_md)
+                        if not template_path.is_absolute():
+                            # Try relative to project root first
+                            project_root = Path(__file__).parent.parent
+                            template_path = project_root / "agents_manifest" / "templates" / template_path.name
+
+                        if template_path.exists():
+                            template_content = template_path.read_text()
+                            logger.debug(f"Loaded template from {template_path}")
+                        else:
+                            logger.warning(f"Template not found at {template_path}")
+                    except Exception as e:
+                        logger.error(f"Error loading template: {str(e)}")
+                action_data = {
+                    "name": endpoint_info.metadata.name,
+                    "slug": action_slug,
+                    "actionType": endpoint_info.metadata.action_type.value,
+                    "path": f"/agents/{self.slug}/actions/{action_slug}",
+                    "method": "POST",
+                    "inputSchema": endpoint_info.input_model.model_json_schema(),
+                    "outputSchema": endpoint_info.output_model.model_json_schema(),
+                    "description": endpoint_info.metadata.description,
+                    "isMDResponseEnabled": template_content is not None,
+                    "examples": endpoint_info.examples or {"validRequests": []}
+                }
+                if template_content:
+                    action_data["responseTemplateMD"] = template_content
+                if hasattr(endpoint_info.metadata, 'ui_components') and endpoint_info.metadata.ui_components:
+                    action_data["uiComponents"] = []
+                    for comp in endpoint_info.metadata.ui_components:
+                        component_data = comp.dict(exclude_none=True)
+                        # Add supported events to the manifest
+                        if hasattr(comp, 'supported_events'):
+                            component_data["supported_events"] = list(comp.event_handlers.keys())
+                        if hasattr(comp, 'event_handlers'):
+                            component_data["availableEvents"] = list(comp.event_handlers.keys())
+                        action_data["uiComponents"].append(component_data)
+                actions.append(action_data)
         logger.debug(f"Generated {len(actions)} actions for manifest")
         workflows_data = []
-        for workflow in self.workflows:
-            workflow_data = workflow.model_dump()
-            workflow_data["endpoints"] = {}
-            # Get workflow handlers and step_metadata
-            for step in workflow.steps:
-                step_handler = self.workflow_registry.get_step_handler(workflow.id, step.id)
-                if step_handler:
-                    handler, step_metadata = step_handler
-                    if step.id == workflow.initial_step:
-                        # Extract schemas from decorated function signature
-                        input_model = self._get_input_model(handler)
-                        output_model = self._get_output_model(handler)
-                        workflow_data["endpoints"]["start"] = {
-                            "path": f"/agents/{self.slug}/workflows/{workflow.id}/start",
+        logger.debug(f"self.workflow_registry: {self.workflow_registry}")
+        # First check the workflow registry
+        if self.workflow_registry and hasattr(self.workflow_registry, 'workflows') and self.workflow_registry.workflows:
+            logger.debug(f"Using workflow_registry.workflows: {list(self.workflow_registry.workflows.keys())}")
+            for workflow_id, workflow in self.workflow_registry.workflows.items():
+                logger.debug(f"Processing workflow from registry: {workflow_id}")
+                workflow_data = workflow.model_dump()
+                workflow_data["endpoints"] = {}
+                # Process each step in the workflow
+                for step in workflow.steps:
+                    logger.debug(f"Processing step: {step.id}")
+                    step_handler_info = self.workflow_registry.get_step_handler(workflow.id, step.id)
+                    if step_handler_info:
+                        # Process step endpoint data
+                        handler, step_metadata = step_handler_info
+                        endpoint_path = f"/agents/{self.slug}/workflows/{workflow.id}/steps/{step.id}"
+                        step_endpoint = {
+                            "path": endpoint_path,
                             "method": "POST",
-                            "input_schema": input_model.model_json_schema() if input_model else {},
-                            "output_schema": output_model.model_json_schema() if output_model else {},
-                            "description": f"Start the {workflow.name} workflow"
+                            "description": step_metadata.description or f"Execute step {step.id}"
                         }
+                        # Add input/output schemas
+                        input_model = self._get_input_model(handler)
+                        if input_model:
+                            step_endpoint["input_schema"] = input_model.model_json_schema()
+                        output_model = self._get_output_model(handler)
+                        if output_model:
+                            step_endpoint["output_schema"] = output_model.model_json_schema()
+                        # Add UI components
                         if hasattr(step_metadata, 'ui_components') and step_metadata.ui_components:
-                            workflow_data["endpoints"]["start"]["uiComponents"] = [
-                                comp.dict(exclude_none=True)
-                                for comp in step_metadata.ui_components
-                            ]
+                            step_endpoint["uiComponents"] = []
+                            for comp in step_metadata.ui_components:
+                                component_data = comp.dict(exclude_none=True)
+                                # Add supported events to the manifest
+                                if hasattr(comp, 'supported_events'):
+                                    component_data["supported_events"] = list(comp.event_handlers.keys())
+                                step_endpoint["uiComponents"].append(component_data)
+                        workflow_data["endpoints"][f"step_{step.id}"] = step_endpoint
+                        # Add start endpoint if this is the initial step
+                        if step.id == workflow.initial_step:
+                            start_endpoint = {
+                                "path": f"/agents/{self.slug}/workflows/{workflow.id}/start",
+                                "method": "POST",
+                                "description": f"Start the {workflow.name} workflow"
+                            }
+                            # Copy the same schema and UI components
+                            if 'input_schema' in step_endpoint:
+                                start_endpoint["input_schema"] = step_endpoint["input_schema"]
+                            if 'output_schema' in step_endpoint:
+                                start_endpoint["output_schema"] = step_endpoint["output_schema"]
+                            if 'uiComponents' in step_endpoint:
+                                start_endpoint["uiComponents"] = step_endpoint["uiComponents"]
+                            
+                            workflow_data["endpoints"]["start"] = start_endpoint
                     else:
-                        input_model = self._get_input_model(handler)
-                        output_model = self._get_output_model(handler)
-                        workflow_data["endpoints"][f"step_{step.id}"] = {
-                            "path": f"/agents/{self.slug}/workflows/{workflow.id}/steps/{step.id}",
-                            "method": "POST",
-                            "input_schema": input_model.model_json_schema() if input_model else {},
-                            "output_schema": output_model.model_json_schema() if output_model else {},
-                            "description": step_metadata.description
-                        }
-                        if hasattr(step_metadata, 'ui_components') and step_metadata.ui_components:
-                            workflow_data["endpoints"][f"step_{step.id}"]["uiComponents"] = [
-                                comp.dict(exclude_none=True)
-                                for comp in step_metadata.ui_components
-                            ]
-            workflows_data.append(workflow_data)
-
-        return {
+                        logger.warning(f"No handler found for step {step.id} in workflow {workflow.id}")
+                workflows_data.append(workflow_data)
+                logger.debug(f"Added workflow data for {workflow_id}")
+        # Fall back to self.workflows if the registry didn't have workflows
+        elif self.workflows:
+            logger.debug(f"Falling back to self.workflows: {[w.id for w in self.workflows]}")
+            for workflow in self.workflows:
+                logger.debug(f"Processing fallback workflow: {workflow.id}")
+                workflow_data = workflow.model_dump()
+                workflow_data["endpoints"] = {}  # Basic endpoints
+                workflows_data.append(workflow_data)
+        # Generate the final manifest
+        manifest = {
             "name": self.name,
             "slug": self.slug,
             "version": self.version,
@@ -272,8 +304,10 @@ class AgentRegistry:
             "metaInfo": {},
             "capabilities": [cap.model_dump() for cap in self.capabilities],
             "actions": actions,
-            "workflows": workflows_data if workflows_data else []
+            "workflows": workflows_data
         }
+        logger.debug(f"Generated manifest with {len(workflows_data)} workflows")
+        return manifest
 
 def configure_agent_routes(
    app: FastAPI,
@@ -302,15 +336,11 @@ def configure_agent_routes(
                     target_key = getattr(request_data, 'component_key', 'main_editor')
                     logger.debug(f"Handling component action: {request_data.action} for {target_key}")
                     # Prepare data for dispatching
-                    data_dict = request_data.dict() if hasattr(request_data, 'dict') else {}
+                    data_dict = request_data.model_dump() if hasattr(request_data, 'dict') else {}
                     try:
-                        # Try to dispatch through global event system
-                        logger.debug(f"Attempting to dispatch action via global_dispatcher")
-                        # For backward compatibility, check both event_handlers and action_handlers
-                        event_handlers = global_dispatcher.event_handlers.get(target_key, {})
-                        action_handlers = getattr(global_dispatcher, 'action_handlers', {}).get(target_key, {})
+                        logger.debug(f"Attempting to dispatch component event via global_dispatcher")
+                        event_handlers = global_event_dispatcher.event_handlers.get(target_key, {})
                         logger.debug(f"Available event handlers: {event_handlers.keys()}")
-                        logger.debug(f"Available action handlers: {action_handlers.keys() if hasattr(global_dispatcher, 'action_handlers') else []}")
                         # First, try to handle as an event (new style)
                         try:
                             # Map common action names to event names
@@ -319,7 +349,7 @@ def configure_agent_routes(
                                 event_name = 'row_click'
                             elif request_data.action == 'search_seats':
                                 event_name = 'submit'
-                            result = await global_dispatcher.dispatch_event(
+                            result = await global_event_dispatcher.dispatch_event(
                                 component_key=target_key,
                                 event_name=event_name,
                                 event_data=data_dict
@@ -336,9 +366,9 @@ def configure_agent_routes(
                             # Fall back to old action dispatch if event dispatch fails
                             logger.debug(f"Event dispatch failed, trying action dispatch: {str(e)}")
                             # Only try action dispatch if we have the attribute
-                            if hasattr(global_dispatcher, 'dispatch_action'):
+                            if hasattr(global_event_dispatcher, 'dispatch_action'):
                                 try:
-                                    result = await global_dispatcher.dispatch_action(
+                                    result = await global_event_dispatcher.dispatch_action(
                                         component_key=target_key,
                                         action_name=request_data.action,
                                         action_data=data_dict
@@ -380,9 +410,11 @@ def configure_agent_routes(
             response_model=endpoint_info.output_model
         )
 
-   # Workflow routes
+    # Workflow routes
     if workflow_registry and workflow_registry.workflows:
         for workflow in workflow_registry.workflows.values():
+            workflow_registry.register_workflow(workflow)
+            logger.debug(f"Registered workflow in registry: {workflow.id}")
             logger.debug(f"Setting up workflow: {workflow.id}")
            
             # Start route
@@ -401,19 +433,16 @@ def configure_agent_routes(
                 except Exception as e:
                     logger.error(f"Error in workflow start: {str(e)}")
                     raise HTTPException(status_code=500, detail=str(e))
-
             app.add_api_route(
                 start_path,
                 workflow_start_handler,
                 methods=["POST"]
             )
-
            # Step routes
             for step in workflow.steps:
                 if step.type != WorkflowStepType.END:
                     step_path = f"/agents/{agent_slug}/workflow/{workflow.id}/steps/{step.id}"
                     logger.debug(f"Registering step route: {step_path}")
- 
                     async def step_handler(
                         data: Dict[str, Any],
                         step_id: str = step.id,
@@ -449,65 +478,66 @@ def configure_agent(
 ) -> FastAPI:
     """Configure an agent with both action and workflow routes."""
     logger.debug(f"=== Configuring agent: {name} ===")
+    # Get registries FIRST before creating the AgentRegistry
+    action_registry = get_action_registry(name)
+    workflow_registry = get_workflow_registry(name)  # Always get the registry, not conditionally
     # Create agent registry
     registry = AgentRegistry(base_url, name, version, description, capabilities, workflows)
     agent_slug = registry.slug
-
-    # Get registries
+    # Get action registry first
     action_registry = get_action_registry(name)
     registry.action_registry = action_registry
-    workflow_registry = get_workflow_registry(name) if workflows else None
-
-    # Register all UI components and their handlers with the global dispatcher
+    # Get workflow registry and explicitly register workflows
+    workflow_registry = get_workflow_registry(name)
+    registry.workflow_registry = workflow_registry
+    # First, register workflows if they exist
+    if workflows:
+        for workflow in workflows:
+            logger.debug(f"Registering workflow: {workflow.id}")
+            workflow_registry.register_workflow(workflow)
+            # Look for steps that might be already registered
+            for step in workflow.steps:
+                step_handler = workflow_registry.get_step_handler(workflow.id, step.id)
+                if step_handler:
+                    handler, metadata = step_handler
+                    if hasattr(metadata, 'ui_components') and metadata.ui_components:
+                        for component in metadata.ui_components:
+                            logger.debug(f"Registering workflow component {component.component_key} from step {step.id}")
+                            # Register the component with the global dispatcher
+                            global_event_dispatcher.register_component(component)
+                            # Register event handlers if present
+                            if hasattr(component, 'event_handlers'):
+                                for event_name, handler in component.event_handlers.items():
+                                    logger.debug(f"Registering event handler {event_name} for {component.component_key}")
+                                    global_event_dispatcher.register_event_handler(
+                                        component_key=component.component_key,
+                                        event_name=event_name,
+                                        handler=handler
+                                    )
+    # Register UI components from actions
     for action_slug, endpoint_info in action_registry.actions.items():
-        if hasattr(endpoint_info.metadata, 'ui_components') and endpoint_info.metadata.ui_components:
+        if hasattr(endpoint_info.metadata, 'ui_components'):
             for component in endpoint_info.metadata.ui_components:
-                logger.debug(f"Registering component {component.component_key} from {action_slug}")
-                # Register the full component, not just handlers
-                global_dispatcher.register_component(component)
+                logger.debug(f"Registering action component {component.component_key} from {action_slug}")
+                # Register the component with the global dispatcher
+                global_event_dispatcher.register_component(component)
                 # Register event handlers if present
                 if hasattr(component, 'event_handlers'):
                     for event_name, handler in component.event_handlers.items():
                         logger.debug(f"Registering event handler {event_name} for {component.component_key}")
-                        global_dispatcher.register_event_handler(
+                        global_event_dispatcher.register_event_handler(
                             component_key=component.component_key,
                             event_name=event_name,
                             handler=handler
                         )
-                # Register action handlers if present
-                if hasattr(component, 'action_handlers'):
-                    if isinstance(component.action_handlers, dict):
-                        for action, handler in component.action_handlers.items():
-                            logger.debug(f"Registering action handler {action} for {component.component_key}")
-                            global_dispatcher.register_action_handler(
-                                component_key=component.component_key,
-                                action=action,
-                                handler=handler
-                            )
-                    elif hasattr(component.action_handlers, 'handlers'):
-                        for action, handler in component.action_handlers.handlers.items():
-                            logger.debug(f"Registering action handler {action} for {component.component_key}")
-                            global_dispatcher.register_action_handler(
-                                component_key=component.component_key,
-                                action=action,
-                                handler=handler
-                            )
-
     # Configure routes
     configure_agent_routes(app, agent_slug, action_registry, workflow_registry)
-    if workflow_registry and workflows:
-        for workflow in workflows:
-            workflow_registry.register_workflow(workflow)
-            logger.debug(f"Registering workflow: {workflow.id}")
-
+    if workflow_registry and workflow_registry.workflows:
         configure_workflow_routes(app, workflow_registry, agent_slug)
-        registry.workflow_registry = workflow_registry
-
+    # Store the registry
     agent_registries[agent_slug] = registry
     logger.debug(f"Registered routes: {[route.path for route in app.routes]}")
-    # Log registered handlers for debugging
-    logger.debug(f"Registered event handlers: {global_dispatcher.event_handlers}")
-    logger.debug(f"Registered action handlers: {global_dispatcher.action_handlers}")
+    logger.debug(f"Registered event handlers: {global_event_dispatcher.event_handlers}")
     return app
 
 def setup_agent_routes(app: FastAPI):

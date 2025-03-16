@@ -1,125 +1,16 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, Literal
 import datetime
-import random
-import json
-import logging
-from enum import Enum
-
-from agents_manifest.base_types import ActionType, Capability, AgentConfig, UIResponse, UIComponentUpdate
+from loguru import logger
+from agents_manifest.base_types import ActionType, Capability, AgentConfig, UIComponentUpdate
 from agents_manifest.agent_action_integration import enhanced_agent_action
-from agents_manifest.ui_components import (
-    ActionHandlerRegistry, FormComponent, FormField, TableComponent, TableColumn, MarkdownComponent
+
+from agents.models.flight_agent import (
+    SeatClass, SeatClassChoices, FlightDetails, SeatPreference, FlightSearchInput, FlightSearchOutput,
+    BookingInput, BookingOutput, TravelPreferences, TravelPlanRequest, TravelPlanResponse,
+    SeatSelectionInput, SeatSelectionOutput
 )
-from agents_manifest.component_decorator import component_event_handler
+from agents.ui_components.flight_agent import flight_info_form, seats_table, status_display
 from agents.llm_client import create_llm_client
-
-logger = logging.getLogger(__name__)
-
-class SeatClass(str, Enum):
-    """Available seat classes."""
-    ECONOMY = "economy"
-    BUSINESS = "business"
-    FIRST = "first"
-
-# Models
-class FlightDetails(BaseModel):
-    """Details of a flight."""
-    flight_number: str = Field(..., description="Unique flight identifier")
-    price: float = Field(..., description="Flight price in USD")
-    origin: str = Field(..., description="Three-letter airport code for origin")
-    destination: str = Field(..., description="Three-letter airport code for destination")
-    flight_date: datetime.date = Field(..., description="Flight date")
-
-class NoFlightFound(BaseModel):
-    """Response when no valid flight is found."""
-    reason: str = Field(..., description="Reason why no flight was found")
-
-class SeatPreference(BaseModel):
-    """Seat preference details."""
-    row: int = Field(..., ge=1, le=30, description="Row number")
-    seat: Literal["A", "B", "C", "D", "E", "F"] = Field(..., description="Seat letter")
-    seat_class: SeatClass = Field(default=SeatClass.ECONOMY)
-
-class FlightSearchInput(BaseModel):
-    """Input for flight search."""
-    origin: str = Field(..., description="Three-letter airport code")
-    destination: str = Field(..., description="Three-letter airport code")
-    departure_date: datetime.date = Field(..., description="Desired flight date")
-    passengers: int = Field(default=1, ge=1, le=9, description="Number of passengers")
-    seat_class: Optional[SeatClass] = None
-
-class FlightSearchOutput(BaseModel):
-    """Output for flight search results."""
-    flights: List[FlightDetails]
-    search_time: float
-    filters_applied: Dict[str, Any]
-
-class BookingInput(BaseModel):
-    """Input for flight booking."""
-    flight_number: str
-    passengers: List[Dict[str, str]]
-    seat_preferences: List[SeatPreference]
-
-class BookingOutput(BaseModel):
-    """Output for booking confirmation."""
-    booking_reference: str
-    flight_details: FlightDetails
-    seats: List[SeatPreference]
-    total_price: float
-    booking_time: datetime.datetime
-
-class TravelPreferences(BaseModel):
-    """Travel preferences for planning."""
-    budget_range: str = Field(..., description="Budget range (e.g., 'economy', 'moderate', 'luxury')")
-    interests: List[str] = Field(..., description="List of travel interests")
-    accommodation_type: Optional[str] = Field(None, description="Preferred accommodation type")
-    transportation_mode: Optional[str] = Field(None, description="Preferred mode of transportation")
-    meal_preferences: Optional[str] = Field(None, description="Dietary preferences")
-
-class TravelPlanRequest(BaseModel):
-    """Input for travel plan generation."""
-    origin: str = Field(..., description="Three-letter airport code for origin")
-    destination: str = Field(..., description="Three-letter airport code for destination")
-    start_date: datetime.date = Field(..., description="Start date of travel")
-    end_date: datetime.date = Field(..., description="End date of travel")
-    travelers: int = Field(default=1, ge=1, le=9, description="Number of travelers")
-    preferences: TravelPreferences = Field(..., description="Travel preferences")
-    max_budget: float = Field(..., description="Maximum budget in USD")
-
-class DailyItinerary(BaseModel):
-    """Daily itinerary details."""
-    date: datetime.date
-    activities: List[str]
-    accommodation: str
-    meals: List[str]
-    transportation: str
-    estimated_costs: Dict[str, float]
-
-class TravelPlanResponse(BaseModel):
-    """Output for travel plan generation."""
-    itinerary: List[DailyItinerary]
-    total_cost: float
-    flight_details: FlightDetails
-    recommendations: List[str]
-    weather_notes: Optional[str]
-    local_tips: List[str]
-    emergency_contacts: Dict[str, str]
-
-class SeatSelectionInput(BaseModel):
-    """Input for seat selection interface."""
-    flight_number: str
-    passenger_count: Optional[int] = Field(default=1, ge=1, le=9)
-    action: Optional[str] = None
-    component_key: Optional[str] = None
-    seat_number: Optional[str] = None
-    selected_class: Optional[str] = None
-
-class SeatSelectionOutput(UIResponse):
-    """Output for seat selection interface with UI updates."""
-    data: Dict[str, Any]
-    ui_updates: List[UIComponentUpdate]
 
 
 # Define rich capabilities for the flight agent
@@ -320,9 +211,9 @@ async def plan_travel(
                 destination=request.destination,
                 departure_date=request.start_date,
                 passengers=request.travelers,
-                seat_class=SeatClass.ECONOMY if request.preferences.budget_range == "economy"
-                         else SeatClass.BUSINESS if request.preferences.budget_range == "moderate"
-                         else SeatClass.FIRST
+                seat_class=SeatClassChoices.ECONOMY if request.preferences.budget_range == "economy"
+                         else SeatClassChoices.BUSINESS if request.preferences.budget_range == "moderate"
+                         else SeatClassChoices.FIRST
             )
         )
 
@@ -409,188 +300,6 @@ async def plan_travel(
         logger.error(f"Error in plan_travel: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-# Create the form component with event handlers directly
-
-async def handle_form_submit(
-    flight_number: str,
-    selected_class: Optional[str] = None,
-    **kwargs
-) -> UIResponse:
-    """Handle form submission event from the flight info form."""
-    try:
-        # Generate sample seat data
-        seat_class = selected_class if selected_class else "economy"
-        
-        if seat_class == "economy":
-            rows = range(10, 30)
-            price_base = 150.00
-        elif seat_class == "business":
-            rows = range(4, 10)
-            price_base = 450.00
-        else:  # First class
-            rows = range(1, 4)
-            price_base = 950.00
-        
-        sample_seats = [
-            {
-                "seat_number": f"{row}{letter}",
-                "class": seat_class.capitalize(),
-                "price": price_base + random.randint(-20, 50),
-                "available": random.random() > 0.3
-            }
-            for row in rows
-            for letter in ['A', 'B', 'C', 'D', 'E', 'F']
-        ]
-
-        return UIResponse(
-            data={
-                "flight_number": flight_number,
-                "class": seat_class,
-                "total_seats": len(sample_seats),
-                "available_seats": len([s for s in sample_seats if s["available"]])
-            },
-            ui_updates=[
-                UIComponentUpdate(
-                    key="seats_table",
-                    state={"data": sample_seats}
-                ),
-                UIComponentUpdate(
-                    key="status_display",
-                    state={"content": f"## Flight {flight_number}\n\nShowing available seats for {seat_class} class. Click on a seat to select it."}
-                )
-            ]
-        )
-    except Exception as e:
-        logger.error(f"Error in form submit handler: {str(e)}", exc_info=True)
-        return UIResponse(
-            data={"error": str(e)},
-            ui_updates=[
-                UIComponentUpdate(
-                    key="status_display",
-                    state={"content": f"## Error\n\nAn error occurred: {str(e)}"}
-                )
-            ]
-        )
-
-flight_info_form = FormComponent(
-    component_key="flight_info",
-    component_type="form",
-    title="Flight Information",
-    form_fields=[
-        FormField(
-            field_name="flight_number",
-            label_text="Flight Number",
-            field_type="text",
-            is_required=True
-        ),
-        FormField(
-            field_name="selected_class",
-            label_text="Class",
-            field_type="select",
-            field_options=[
-                {"value": "economy", "label": "Economy"},
-                {"value": "business", "label": "Business"},
-                {"value": "first", "label": "First Class"}
-            ]
-        )
-    ],
-    supported_events=["submit"],
-    event_handlers={  # Add event handlers directly here
-        "submit": handle_form_submit
-    }
-)
-
-async def handle_seat_selection(
-    action: str,  # Will receive 'row_click'
-    data: Dict[str, Any],  # Will receive the row data
-    flight_number: str = "",
-    **kwargs
-) -> UIResponse:
-    """Handle seat selection (row click) event from the table."""
-    try:
-        # Extract seat information from the data
-        row_data = data  # The row data is passed in the data field
-        seat_number = row_data.get("seat_number", "")
-        seat_class = row_data.get("class", "")
-        seat_price = row_data.get("price", 0.0)
-        # Only allow selection if seat is available
-        if row_data.get("available", False):
-            return UIResponse(
-                data={"error": "Seat not available"},
-                ui_updates=[
-                    UIComponentUpdate(
-                        key="status_display",
-                        state={"content": f"## Error\n\nSeat {seat_number} is not available. Please select another seat."}
-                    )
-                ]
-            )
-        confirmation_code = f"SEAT{random.randint(10000, 99999)}"
-        return UIResponse(
-            data={
-                "seat_selected": seat_number,
-                "seat_class": seat_class,
-                "seat_price": seat_price,
-                "flight_number": flight_number,
-                "selection_time": datetime.datetime.now().isoformat(),
-                "confirmation_code": confirmation_code
-            },
-            ui_updates=[
-                UIComponentUpdate(
-                    key="status_display",
-                    state={
-                        "content": f"""## Seat Selected\n\nYou have selected seat **{seat_number}** ({seat_class}) on flight **{flight_number}**.\n\n**Price:** ${seat_price:.2f}\n**Confirmation code:** {confirmation_code}\n\nYour seat has been reserved. Proceed to checkout to complete your booking."""
-                    }
-                ),
-                UIComponentUpdate(
-                    key="seats_table",
-                    state={
-                        "data_updates": [
-                            {"row_match": {"seat_number": seat_number}, "field": "available", "value": False}
-                        ]
-                    }
-                )
-            ]
-        )
-    except Exception as e:
-        logger.error(f"Error in seat selection handler: {str(e)}", exc_info=True)
-        return UIResponse(
-            data={"error": str(e)},
-            ui_updates=[
-                UIComponentUpdate(
-                    key="status_display",
-                    state={"content": f"## Error\n\nAn error occurred: {str(e)}"}
-                )
-            ]
-        )
-
-# Create the table component with event handlers directly
-seats_table = TableComponent(
-    component_key="seats_table",
-    component_type="table",
-    title="Available Seats",
-    columns=[
-        TableColumn(field_name="seat_number", header_text="Seat"),
-        TableColumn(field_name="class", header_text="Class"),
-        TableColumn(field_name="price", header_text="Price"),
-        TableColumn(field_name="available", header_text="Available")
-    ],
-    table_data=[],
-    supported_events=["row_click"],
-    event_handlers={
-        "row_click": handle_seat_selection  # The handler will now receive properly structured data
-    }
-)
-
-# Status display component remains the same
-status_display = MarkdownComponent(
-    component_key="status_display",
-    component_type="markdown",
-    title="Reservation Status",
-    markdown_content="Select a seat to complete your reservation.",
-    content_style={"padding": "1rem", "backgroundColor": "#f5f5f5"}
-)
-
-# Remove the @component_event_handler decorators since we're registering handlers directly
 
 @enhanced_agent_action(
     agent_config=flight_agent_app,
@@ -606,8 +315,7 @@ status_display = MarkdownComponent(
 async def seat_selection_interface(input_data: SeatSelectionInput) -> SeatSelectionOutput:
     """
     Handle interactive seat selection interface.
-
-    This function handles the initial state setup. Events like 'row_click'
+    This function handles the initial state setup. Events like 'select_seat'
     and 'submit' are handled by the component-specific event handlers.
 
     Args:
@@ -620,7 +328,6 @@ async def seat_selection_interface(input_data: SeatSelectionInput) -> SeatSelect
         # Initial state setup
         flight_number = getattr(input_data, 'flight_number', '')
         passenger_count = getattr(input_data, 'passenger_count', 1)
-
         # Initial sample seats (just a few to start)
         sample_seats = [
             {"seat_number": f"{row}{letter}",

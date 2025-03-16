@@ -1,17 +1,14 @@
 """
 UI component system with integrated event handlers for improved developer experience.
 """
-from typing import Dict, Any, Callable, Optional, List, ClassVar, Type, Union
+from typing import Dict, Any, Callable, Optional, List, ClassVar, Type
 from pydantic import BaseModel, Field, model_validator
 import inspect
 from enum import Enum
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 class ComponentEventType(str, Enum):
-    """Standard event types for UI components with descriptive naming."""
-    CONTENT_CHANGE = "content_change"
+    """Generic common event types for UI components with descriptive naming."""
     SUBMIT = "submit"
     ROW_CLICK = "row_click"
     SORT = "sort"
@@ -36,7 +33,6 @@ class EventContext(BaseModel):
     model_config = {
         "arbitrary_types_allowed": True
     }
-
 
 class UIComponent(BaseModel):
     """
@@ -137,10 +133,9 @@ class UIComponent(BaseModel):
         Set up handlers from component attributes after initialization.
 
         This method should be overridden by subclasses to collect handlers
-        from specific attributes like on_submit, on_content_change, etc.
+        from specific attributes like on_submit, on_save, etc.
         """
         return self
-
 
 class ActionHandlerRegistry(BaseModel):
     """
@@ -151,11 +146,11 @@ class ActionHandlerRegistry(BaseModel):
     """
     handler_functions: Dict[str, Callable] = Field(default_factory=dict)
     default_handler_function: Optional[Callable] = None
-    
+
     model_config = {
         "arbitrary_types_allowed": True
     }
-    
+
     def get_handler_for_action(self, action_name: str) -> Optional[Callable]:
         """
         Get the appropriate handler for an action.
@@ -167,7 +162,7 @@ class ActionHandlerRegistry(BaseModel):
             The handler function, or the default handler if not found
         """
         return self.handler_functions.get(action_name, self.default_handler_function)
-    
+
     def register_action_handler(self, action_name: str, handler_function: Callable) -> None:
         """
         Register a handler for a specific action.
@@ -178,18 +173,17 @@ class ActionHandlerRegistry(BaseModel):
         """
         self.handler_functions[action_name] = handler_function
 
-
 class ActionHandlerMap:
     """
     Map of action names to handler functions.
-    
+
     This class provides a simpler alternative to ActionHandlerRegistry
     for defining action handlers directly when creating a component.
     """
     def __init__(self, handlers: Dict[str, Callable], default_handler: Optional[Callable] = None):
         """
         Initialize the action handler map.
-        
+
         Args:
             handlers: Dictionary mapping action names to handler functions
             default_handler: Optional default handler for actions not in handlers
@@ -197,11 +191,10 @@ class ActionHandlerMap:
         self.handlers = handlers
         self.default_handler = default_handler
 
-
 class TableColumn(BaseModel):
     """
     Configuration for a column in a table component.
-    
+
     Provides detailed customization options for table columns,
     including data binding, display properties, and sorting.
     """
@@ -209,7 +202,6 @@ class TableColumn(BaseModel):
     header_text: str
     sortable: bool = True
     column_width: Optional[str] = None
-
 
 class TableComponent(UIComponent):
     """
@@ -221,16 +213,12 @@ class TableComponent(UIComponent):
     component_type: str = "table"
     columns: List[TableColumn]
     table_data: List[Dict[str, Any]]
-    # available_actions: List[str] = Field(default_factory=list)
-    # row_actions: List[str] = Field(default_factory=list)  # Actions that apply to individual rows
     enable_pagination: bool = True
     rows_per_page: int = 10
     # Event handlers as component attributes
     on_row_click: Optional[Callable] = Field(default=None, exclude=True)
     on_sort: Optional[Callable] = Field(default=None, exclude=True)
     on_pagination: Optional[Callable] = Field(default=None, exclude=True)
-    # Action handlers for row-specific actions
-    # action_handler_registry: Optional[ActionHandlerRegistry] = Field(default=None, exclude=True)
     # Define valid event types for table components
     valid_event_types: ClassVar[List[str]] = [
         ComponentEventType.ROW_CLICK,
@@ -240,11 +228,6 @@ class TableComponent(UIComponent):
 
     def __init__(self, **data):
         """Initialize with proper handling of backward compatibility."""
-        # Handle backward compatibility with old attribute names
-        if 'actions' in data and 'supported_events' not in data:
-            data['supported_events'] = data.pop('actions')
-        if 'available_actions' in data and 'supported_events' not in data:
-            data['supported_events'] = data.pop('available_actions')
         if 'row_actions' in data and 'supported_events' not in data:
             data['supported_events'] = data.pop('row_actions')
         # Handle action_handlers old-style initialization (backward compatibility)
@@ -266,20 +249,6 @@ class TableComponent(UIComponent):
             self.event_handlers[EventType.SORT] = self.on_sort
         if self.on_pagination:
             self.event_handlers[EventType.PAGINATION] = self.on_pagination
-
-        # Handle legacy action_handlers mapping (backward compatibility)
-        if hasattr(self, 'action_handlers') and self.action_handlers:
-            # Process old-style action handlers as event handlers
-            if hasattr(self.action_handlers, 'handlers'):
-                for action_name, handler in self.action_handlers.handlers.items():
-                    # Convert action names to event names
-                    event_name = action_name
-                    # Special case conversions for common actions
-                    if action_name == 'select':
-                        event_name = 'row_click'
-
-                    self.register_event_handler(event_name, handler)
-
         return self
 
     async def handle_row_action(self, action_name: str, row_data: Dict[str, Any], **kwargs) -> Any:
@@ -331,7 +300,7 @@ class TableComponent(UIComponent):
 class CodeEditorComponent(UIComponent):
     """
     Code editor component with integrated event handling.
-    
+
     Provides a rich code editing experience with syntax highlighting,
     formatting, and other development features. Handlers can be attached
     directly to the component.
@@ -347,13 +316,11 @@ class CodeEditorComponent(UIComponent):
     # Action handlers for dynamic actions
     action_handler_registry: Optional[ActionHandlerRegistry] = Field(default=None, exclude=True)
     # Event handlers as component attributes
-    on_content_change: Optional[Callable] = Field(default=None, exclude=True)
     on_format: Optional[Callable] = Field(default=None, exclude=True)
     on_lint: Optional[Callable] = Field(default=None, exclude=True)
     on_save: Optional[Callable] = Field(default=None, exclude=True)
     # Define valid event types for code editor components
     valid_event_types: ClassVar[List[str]] = [
-        ComponentEventType.CONTENT_CHANGE,
         ComponentEventType.FORMAT,
         ComponentEventType.LINT,
         ComponentEventType.SAVE,
@@ -370,7 +337,6 @@ class CodeEditorComponent(UIComponent):
             registry.handler_functions = action_map.handlers
             registry.default_handler_function = action_map.default_handler
             data['action_handler_registry'] = registry
-            
         # Continue with standard initialization
         super().__init__(**data)
 
@@ -381,15 +347,12 @@ class CodeEditorComponent(UIComponent):
         if not hasattr(self, 'event_handlers'):
             self.event_handlers = {}
         # Register handlers from attributes
-        if self.on_content_change:
-            self.event_handlers[ComponentEventType.CONTENT_CHANGE] = self.on_content_change
         if self.on_format:
             self.event_handlers[ComponentEventType.FORMAT] = self.on_format
         if self.on_lint:
             self.event_handlers[ComponentEventType.LINT] = self.on_lint
         if self.on_save:
             self.event_handlers[ComponentEventType.SAVE] = self.on_save
-
         return self
 
     async def handle_action(self, action_name: str, **kwargs) -> Any:
@@ -412,11 +375,10 @@ class CodeEditorComponent(UIComponent):
             return await self.event_handlers[ComponentEventType.ACTION](action=action_name, **kwargs)
         return None
 
-
 class FormField(BaseModel):
     """
     Configuration for a field in a form component.
-    
+
     Provides detailed configuration for form fields, including
     data binding, validation, and display properties.
     """
@@ -428,11 +390,10 @@ class FormField(BaseModel):
     field_options: Optional[List[Dict[str, str]]] = None
     validation_rules: Optional[Dict[str, Any]] = None
 
-
 class FormComponent(UIComponent):
     """
     Form component with integrated event handling.
-    
+
     Provides a structured way to collect and validate user input.
     Handlers can be attached directly to the component.
     """
@@ -464,9 +425,7 @@ class FormComponent(UIComponent):
             self.event_handlers[ComponentEventType.FIELD_CHANGE] = self.on_field_change
         if self.on_validation:
             self.event_handlers[ComponentEventType.VALIDATION] = self.on_validation
-            
         return self
-
 
 class MarkdownComponent(UIComponent):
     """
@@ -478,6 +437,5 @@ class MarkdownComponent(UIComponent):
     component_type: str = "markdown"
     markdown_content: str = ""
     content_style: Dict[str, Any] = Field(default_factory=dict)
-
     # Markdown components typically don't have event handlers
     valid_event_types: ClassVar[List[str]] = []

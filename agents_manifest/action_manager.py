@@ -1,21 +1,17 @@
 # action_manager.py
-from typing import Dict, Callable, Optional, List, Any, Type, Union
-from pydantic import BaseModel
+from typing import Dict, Callable, Optional, List, Any, Type
+from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, Response
 import inspect
-import re
 from functools import wraps
 from loguru import logger
-from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass, field
 from jinja2 import Template
-from agents_manifest.base_types import ActionType, BaseMetadata, AgentConfig, slugify, UIComponentUpdate, UIResponse
+from agents_manifest.base_types import ActionType, AgentConfig, slugify, UIResponse
 from agents_manifest.ui_components import UIComponent
-from agents_manifest.event_dispatcher import ComponentEventDispatcher
+from agents_manifest.event_dispatcher import global_event_dispatcher
 
-@dataclass
-class ActionMetadata:
+class ActionMetadata(BaseModel):
     """Metadata container for capturing comprehensive information about an agent action."""
     action_type: ActionType
     name: str
@@ -24,10 +20,9 @@ class ActionMetadata:
     workflow_id: Optional[str] = None
     step_id: Optional[str] = None
     allow_dynamic_ui: bool = False
-    ui_components: List[UIComponent] = field(default_factory=list)
+    ui_components: List[UIComponent] = Field(default_factory=list)
 
-@dataclass
-class ActionEndpointInfo:
+class ActionEndpointInfo(BaseModel):
     """Aggregates all necessary details for registering and invoking an agent action."""
     metadata: ActionMetadata
     input_model: Type[BaseModel]
@@ -65,7 +60,6 @@ class ActionRegistry:
         return self.actions.get(action_slug)
 
 agent_registries: Dict[str, ActionRegistry] = {}
-global_dispatcher = ComponentEventDispatcher()
 
 def get_action_registry(agent_name: str) -> ActionRegistry:
     """Retrieve or create an action registry for a specific agent.
@@ -127,18 +121,18 @@ def agent_action(
         if ui_components:
             for component in ui_components:
                 # Register component and its handlers with the global dispatcher
-                global_dispatcher.register_component_handlers(component)
+                global_event_dispatcher.register_component_handlers(component)
                 # Additional registration for action handlers
                 if hasattr(component, 'action_handlers') and component.action_handlers:
                     for action, handler in component.action_handlers.handlers.items():
-                        global_dispatcher.register_action_handler(
+                        global_event_dispatcher.register_action_handler(
                             component_key=component.key,
                             action=action,
                             handler=handler
                         )
                     # Register default handler if present
                     if component.action_handlers.default_handler:
-                        global_dispatcher.register_action_handler(
+                        global_event_dispatcher.register_action_handler(
                             component_key=component.key,
                             action='__default__',
                             handler=component.action_handlers.default_handler
@@ -148,52 +142,69 @@ def agent_action(
         async def wrapper(*args, **kwargs):
             try:
                 # Get input data
-                print("DEBUGGING: Wrapper function entered")
                 input_data = args[0] if args else next(iter(kwargs.values()), None)
                 logger.debug(f"Input data received: {input_data}")
-                # Register UI components with global dispatcher
+
+                # Handle UI component registration
                 if ui_components:
                     for component in ui_components:
-                        global_dispatcher.register_component_handlers(component)
+                        global_event_dispatcher.register_component_handlers(component)
                         logger.debug(f"Registered handlers for component: {component.key}")
-                # Check for action dispatching if input has an action
-                if hasattr(input_data, 'action') and input_data.action:
-                    # Find the target component key
-                    target_component_key = getattr(input_data, 'component_key', 'main_editor')
-                    # Prepare data for dispatching
-                    data_dict = input_data.dict() if hasattr(input_data, 'dict') else {}
+
+                # Check for event dispatching
+                if hasattr(input_data, 'event') and input_data.event:
+                    target_component_key = getattr(input_data, 'component_key', None)
+                    if not target_component_key:
+                        logger.warning("No component_key provided for event dispatch")
+                        raise HTTPException(status_code=400, detail="Missing component_key for event")
+
                     try:
-                        # Dispatch action through global dispatcher
-                        result = await global_dispatcher.dispatch_action(
+                        # Dispatch event through global dispatcher
+                        result = await global_event_dispatcher.dispatch_event(
                             component_key=target_component_key,
-                            action_name=input_data.action,
-                            action_data=data_dict
+                            event_name=input_data.event,
+                            event_data=input_data.dict() if hasattr(input_data, 'dict') else input_data
                         )
-                        logger.debug(f"Dispatch result: {result}")
+                        logger.debug(f"Event dispatch result: {result}")
                         # Convert to UIResponse if needed
-                        if result and not isinstance(result, UIResponse):
-                            result = UIResponse(
-                                data=result.dict() if hasattr(result, 'dict') else result,
-                                ui_updates=[]
-                            )
+                        if result:
+                            if isinstance(result, dict):
+                                ui_updates = result.pop('ui_updates', []) if isinstance(result.get('ui_updates'), list) else []
+                                return UIResponse(data=result, ui_updates=ui_updates)
+                            elif not isinstance(result, UIResponse):
+                                return UIResponse(data=result, ui_updates=[])
                         return result
-                    except EventDispatchError:
-                        # Fall back to original function if dispatch fails
-                        logger.warning(f"Event dispatch failed for action {input_data.action}")
-                # Call original function if no action handling occurred
+
+                    except Exception as e:
+                        logger.error(f"Event dispatch failed: {str(e)}")
+                        # Fall through to regular function execution
+
+                # Execute original function
                 result = await func(*args, **kwargs)
-                # Handle response template if exists
+
+                # Handle response template
                 if template_path and template_path.exists():
                     template_content = template_path.read_text()
-                    rendered = Template(template_content).render(
-                        **result.dict() if hasattr(result, 'dict') else {}
-                    )
-                    return Response(content=rendered, media_type="text/markdown")
+                    try:
+                        context = result.dict() if hasattr(result, 'dict') else result
+                        rendered = Template(template_content).render(**context)
+                        return Response(content=rendered, media_type="text/markdown")
+                    except Exception as e:
+                        logger.error(f"Template rendering failed: {str(e)}")
+                        return result
+
+                # Ensure proper response structure for UI actions
+                if endpoint_info.metadata.action_type == ActionType.CUSTOM_UI:
+                    if isinstance(result, UIResponse):
+                        return result
+                    elif isinstance(result, dict) and 'ui_updates' in result:
+                        return UIResponse(**result)
+                    else:
+                        return UIResponse(data=result, ui_updates=[])
                 return result
             except Exception as e:
-                logger.error(f"Error in action handler: {str(e)}")
+                logger.error(f"Error in action handler: {str(e)}", exc_info=True)
                 raise HTTPException(status_code=500, detail=str(e))
-
         endpoint_info = ActionEndpointInfo(
             metadata=ActionMetadata(
                 action_type=action_type,
@@ -216,40 +227,43 @@ def agent_action(
         return func
     return decorator
 
-def configure_action_routes(app: FastAPI, registry: ActionRegistry, agent_slug: str):
-    """Configure API routes for all actions in an agent's registry.
-
-    Args:
-        app (FastAPI): The FastAPI application instance
-        registry (ActionRegistry): Registry of actions to configure
-        agent_slug (str): Unique identifier for the agent
-    """
+async def configure_action_routes(app: FastAPI, registry: ActionRegistry, agent_slug: str):
+    """Configure API routes for all actions in an agent's registry."""
     logger.debug(f"Configuring routes for {agent_slug}")
     for action_slug, endpoint_info in registry.actions.items():
         route_path = f"/agents/{agent_slug}/actions/{action_slug}"
         endpoint_info.route_path = route_path
         logger.debug(f"Setting up route: {route_path}")
-        @app.post(route_path)
-        async def handle_action(
-            request_data: endpoint_info.input_model,
-            ei: ActionEndpointInfo = endpoint_info
-        ):
-            try:
-                result = await ei.handler(request_data)
-                if ei.metadata.action_type == ActionType.CUSTOM_UI:
-                    if isinstance(result, UIResponse):
-                        return result
-                    return UIResponse(data=result.dict(), ui_updates=[])
-                if ei.metadata.response_template_md:
-                    template_path = Path(ei.metadata.response_template_md)
-                    if template_path.exists():
-                        template_content = template_path.read_text()
-                        rendered = Template(template_content).render(**result.dict())
-                        return Response(content=rendered, media_type="text/markdown")
-                return result
-            except Exception as e:
-                logger.error(f"Error in action handler: {str(e)}")
-                raise HTTPException(status_code=500, detail=str(e))
+        # Create handler directly without await
+        def create_handler(ei: ActionEndpointInfo = endpoint_info):
+            async def handle_action(request_data: ei.input_model):
+                try:
+                    result = await ei.handler(request_data)
+                    # Handle custom UI responses
+                    if ei.metadata.action_type == ActionType.CUSTOM_UI:
+                        if isinstance(result, UIResponse):
+                            return result
+                        elif isinstance(result, dict) and 'ui_updates' in result:
+                            return UIResponse(**result)
+                        else:
+                            return UIResponse(data=result, ui_updates=[])
+                    # Handle template responses
+                    if ei.metadata.response_template_md:
+                        template_path = Path(ei.metadata.response_template_md)
+                        if template_path.exists():
+                            try:
+                                template_content = template_path.read_text()
+                                context = result.dict() if hasattr(result, 'dict') else result
+                                rendered = Template(template_content).render(**context)
+                                return Response(content=rendered, media_type="text/markdown")
+                            except Exception as e:
+                                logger.error(f"Template rendering failed: {str(e)}")
+                                return result
+                    return result
+                except Exception as e:
+                    logger.error(f"Error in action handler: {str(e)}", exc_info=True)
+                    raise HTTPException(status_code=500, detail=str(e))
+            return handle_action
 
         # Add route to app
         handler = create_handler()

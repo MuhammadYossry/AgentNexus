@@ -1,23 +1,16 @@
 """
 Enhanced agent action decorator with integrated UI component event handling.
 """
-from typing import Dict, Any, List, Callable, Optional, Type, Union, get_type_hints
+from typing import List, Callable, Optional, Union, get_type_hints
 import inspect
 from functools import wraps
-import logging
-from fastapi import HTTPException, Request
-from pydantic import BaseModel
+from loguru import logger
+from fastapi import HTTPException
 
-from agents_manifest.base_types import (
-    AgentConfig, ActionType, UIResponse, UIComponentUpdate
-)
-from agents_manifest.manifest_generator import agent_action as original_agent_action
-from agents_manifest.action_manager import get_action_registry
+from agents_manifest.base_types import AgentConfig, ActionType
+from agents_manifest.action_manager import agent_action as original_agent_action
 from agents_manifest.ui_components import UIComponent
 from agents_manifest.event_dispatcher import global_event_dispatcher, EventDispatchError
-
-logger = logging.getLogger(__name__)
-
 
 def enhanced_agent_action(
     agent_config: AgentConfig,
@@ -152,7 +145,6 @@ def enhanced_agent_action(
         wrapper.event_dispatcher = global_event_dispatcher
         return wrapper
     return decorator
-
 
 # For backward compatibility, you can redefine the original agent_action
 import sys
