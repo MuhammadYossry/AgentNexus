@@ -22,6 +22,29 @@ A Python Library(so you can use it with libs of your choice) that simplifies the
 - **Distributed Architecture**: Enables decentralized agent discovery and execution
 ## 📋 Examples
 
+For comprehensive examples, explore our [`agents`](/agents) folder which contains several fully-implemented agents. This folder structure demonstrates best practices for organizing agent code, UI components, models, and event handlers:
+
+```
+agents
+├── __init__.py
+├── code_agent_v1.py
+├── code_agent_v2.py
+├── flight_agent.py
+├── llm_client.py
+├── models
+│   ├── code_agent_v1.py
+│   ├── code_agent_v2.py
+│   └── flight_agent.py
+├── ui_components
+│   ├── code_agent_v1.py
+│   ├── code_agent_v2.py
+│   └── flight_agent.py
+└── ui_handlers
+    ├── code_agent_v1.py
+    ├── code_agent_v2.py
+    └── flight_agent.py
+```
+
 ### Creating a Simple Agent Action
 
 ```python
@@ -68,7 +91,6 @@ async def format_code(input_data):
         }
     }
 ```
-
 ### 📋 A Workflow Example
 
 ```python
