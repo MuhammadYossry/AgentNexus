@@ -1,0 +1,122 @@
+"""
+Tests for agent configuration functionality.
+"""
+import pytest
+from fast_agents.base_types import AgentConfig, Capability, Workflow, WorkflowStep, WorkflowStepType, slugify
+
+def test_agent_config_initialization(simple_capability):
+    """Test that AgentConfig initializes correctly with basic attributes."""
+    agent_config = AgentConfig(
+        name="Test Agent",
+        version="1.0.0",
+        description="Test description",
+        capabilities=[simple_capability]
+    )
+    assert agent_config.name == "Test Agent"
+    assert agent_config.version == "1.0.0"
+    assert agent_config.description == "Test description"
+    assert len(agent_config.capabilities) == 1
+    assert agent_config.capabilities[0] == simple_capability
+    assert agent_config.workflows is None
+    assert agent_config.base_path == "/v1/test-agent"  # Auto-generated base path
+    assert agent_config.metadata == {}
+
+def test_agent_config_with_workflows(simple_capability):
+    """Test that AgentConfig correctly handles workflows."""
+    workflow = Workflow(
+        id="test_workflow",
+        name="Test Workflow",
+        description="Test workflow description",
+        steps=[
+            WorkflowStep(id="step1", type=WorkflowStepType.START),
+            WorkflowStep(id="step2", type=WorkflowStepType.UI_STEP),
+            WorkflowStep(id="step3", type=WorkflowStepType.END)
+        ],
+        initial_step="step1"
+    )
+    agent_config = AgentConfig(
+        name="Test Agent",
+        version="1.0.0",
+        description="Test description",
+        capabilities=[simple_capability],
+        workflows=[workflow]
+    )
+    assert len(agent_config.workflows) == 1
+    assert agent_config.workflows[0] == workflow
+    assert agent_config.workflows[0].id == "test_workflow"
+    assert len(agent_config.workflows[0].steps) == 3
+    assert agent_config.workflows[0].initial_step == "step1"
+
+def test_agent_config_custom_base_path():
+    """Test that AgentConfig correctly handles custom base paths."""
+    agent_config = AgentConfig(
+        name="Test Agent",
+        version="1.0.0",
+        description="Test description",
+        base_path="/custom/path"
+    )
+    assert agent_config.base_path == "/custom/path"
+
+def test_agent_config_with_metadata():
+    """Test that AgentConfig correctly handles metadata."""
+    metadata = {
+        "author": "Test Author",
+        "email": "test@example.com",
+        "tags": ["test", "agent"],
+        "custom_field": {"nested": "value"}
+    }
+    agent_config = AgentConfig(
+        name="Test Agent",
+        version="1.0.0",
+        description="Test description",
+        metadata=metadata
+    )
+    assert agent_config.metadata == metadata
+    assert agent_config.metadata["author"] == "Test Author"
+    assert "tags" in agent_config.metadata
+    assert agent_config.metadata["custom_field"]["nested"] == "value"
+
+def test_capability_initialization():
+    """Test that Capability initializes correctly."""
+    capability = Capability(
+        skill_path=["Test", "Category", "Skill"],
+        metadata={
+            "feature": "test_feature",
+            "level": "advanced"
+        }
+    )
+    assert capability.skill_path == ["Test", "Category", "Skill"]
+    assert capability.metadata["feature"] == "test_feature"
+    assert capability.metadata["level"] == "advanced"
+
+def test_workflow_initialization():
+    """Test that Workflow initializes correctly."""
+    workflow = Workflow(
+        id="test_workflow",
+        name="Test Workflow",
+        description="Test workflow description",
+        steps=[
+            WorkflowStep(id="step1", type=WorkflowStepType.START),
+            WorkflowStep(id="step2", type=WorkflowStepType.UI_STEP),
+            WorkflowStep(id="step3", type=WorkflowStepType.END)
+        ],
+        initial_step="step1"
+    )
+    assert workflow.id == "test_workflow"
+    assert workflow.name == "Test Workflow"
+    assert workflow.description == "Test workflow description"
+    assert len(workflow.steps) == 3
+    assert workflow.initial_step == "step1"
+    assert workflow.steps[0].id == "step1"
+    assert workflow.steps[0].type == WorkflowStepType.START
+    assert workflow.steps[2].type == WorkflowStepType.END
+
+def test_slugify_function():
+    """Test the slugify function for converting names to URL-friendly slugs."""
+    assert slugify("Test Agent") == "test-agent"
+    assert slugify("Test-Agent") == "test-agent"
+    assert slugify("Test Agent 123") == "test-agent-123"
+    assert slugify("Test@Agent") == "testagent"
+    assert slugify("Test  Agent") == "test-agent"
+    assert slugify("test_agent") == "test_agent"
+    assert slugify("TEST AGENT") == "test-agent"

@@ -43,6 +43,7 @@ seats_table = TableComponent(
         TableColumn(field_name="available", header_text="Available")
     ],
     table_data=[],
+    # Allow naming the event handlers labels to use names like `select_seat` instead of `row_click`
     supported_events=["row_click"],
     event_handlers={
         "row_click": handle_seat_selection,
