@@ -1,4 +1,6 @@
 # FastAgents: Python Library for AI/LLM Agent Development with UI-Driven Workflows and Actions!
+![image](https://github.com/user-attachments/assets/b7e47c80-8741-43b8-b492-591277710997)
+![image](https://github.com/user-attachments/assets/0b4297c5-62c2-4df5-8154-39c2c37a277e)
 
 ## 🚀 Core Purpose
 
