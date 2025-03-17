@@ -1,4 +1,5 @@
 # FastAgents: Python Library for AI/LLM Agent Development with UI-Driven Workflows and Actions!
+[![CI/CD](Relax-N-Tax/AgentHub/actions/workflows/ci.yml/badge.svg)](https://github.com/Relax-N-Tax/AgentHub/actions/workflows/ci.yml)
 ## 🚀 Core Purpose
 
 A Python Library(so you can use it with libs of your choice) that simplifies the creation of LLM and AI agents with UI-interactable APIs with automatic Agent(s) manifest generation, enabling seamless discovery, distributed deployment, and possibly interaction across different agents.
