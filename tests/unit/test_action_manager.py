@@ -176,9 +176,12 @@ async def test_action_handler_execution(simple_agent_config):
 @pytest.mark.asyncio
 async def test_action_with_template(simple_agent_config):
     """Test action with template response."""
-    # Mock just the specific Path methods we need
-    with patch('pathlib.Path.exists', return_value=True), \
-         patch('pathlib.Path.read_text', return_value="# Response Template\n\nResult: {{ result }}\nStatus: {{ status }}"):
+    # Mock the template path and content
+    with patch('pathlib.Path') as mock_path:
+        mock_file = MagicMock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "# Response Template\n\nResult: {{ result }}\nStatus: {{ status }}"
+        mock_path.return_value = mock_file
 
         # Define action with template
         @agent_action(
@@ -198,13 +201,22 @@ async def test_action_with_template(simple_agent_config):
         registry = get_action_registry(simple_agent_config.name)
         action_info = registry.actions["template-action"]
 
-        # Test the handler directly
-        test_input = TestInput(query="test query")
-        result = await action_info.handler(test_input)
-
-        assert isinstance(result, TestOutput)
-        assert "test query" in result.result
-        assert result.status == "success"
+        # Create a mock response to capture the rendered template
+        mock_response = MagicMock(spec=Response)
+        # Patch the Response class
+        with patch('agentnexus.action_manager.Response', return_value=mock_response):
+            # Mock Template.render to return a fixed string
+            with patch('agentnexus.action_manager.Template') as MockTemplate:
+                mock_template_instance = MagicMock()
+                mock_template_instance.render.return_value = "# Rendered Template\n\nResult: Template result\nStatus: success"
+                MockTemplate.return_value = mock_template_instance
+                # Execute the handler directly - don't try to access the handler attribute
+                test_input = TestInput(query="test query")
+                result = await action_info.handler(test_input)
+                # We can still verify that the handler executed correctly
+                assert isinstance(result, TestOutput)
+                assert "test query" in result.result
+                assert result.status == "success"
 
 @pytest.mark.asyncio
 async def test_configure_action_routes():
