@@ -26,11 +26,11 @@ Workflows are structured, multi-step processes that coordinate user interactions
 ## Key Workflow Capabilities
 
 {{< cards >}}
-  {{< card link="workflow-system/creating-workflows" title="Creating Workflows" icon="plus" subtitle="Define multi-step processes with transitions" >}}
-  {{< card link="workflow-system/step-handlers" title="Step Handlers" icon="play" subtitle="Implement workflow step behavior" >}}
-  {{< card link="workflow-system/state-management" title="State Management" icon="variable" subtitle="Preserve and manage state across steps" >}}
-  {{< card link="workflow-system/ui-integration" title="UI Integration" icon="user-circle" subtitle="Connect UI components to workflows" >}}
-  {{< card link="workflow-system/session-management" title="Session Management" icon="clock" subtitle="Handle persistence and timeouts" >}}
+  {{< card link="creating-workflows" title="Creating Workflows" icon="plus" subtitle="Define multi-step processes with transitions" >}}
+  {{< card link="step-handlers" title="Step Handlers" icon="play" subtitle="Implement workflow step behavior" >}}
+  {{< card link="state-management" title="State Management" icon="variable" subtitle="Preserve and manage state across steps" >}}
+  {{< card link="ui-integration" title="UI Integration" icon="user-circle" subtitle="Connect UI components to workflows" >}}
+  {{< card link="session-management" title="Session Management" icon="clock" subtitle="Handle persistence and timeouts" >}}
 {{< /cards >}}
 
 ## Workflow Example

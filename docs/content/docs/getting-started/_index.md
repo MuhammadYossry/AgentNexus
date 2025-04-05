@@ -16,10 +16,10 @@ Welcome to AgentNexus! This section will guide you through the process of settin
 ## What You'll Learn
 
 {{< cards >}}
-  {{< card link="getting-started/installation" title="Installation" icon="arrow-down" subtitle="Set up AgentNexus in your environment" >}}
-  {{< card link="getting-started/basic-concepts" title="Basic Concepts" icon="academic-cap" subtitle="Learn the core concepts of AgentNexus" >}}
-  {{< card link="getting-started/quick-start" title="Quick Start" subtitle="Build your first agent in minutes" >}}
-  {{< card link="getting-started/project-organization" title="Project Organization" icon="folder" subtitle="Best practices for organizing your agent projects" >}}
+  {{< card link="installation" title="Installation" icon="arrow-down" subtitle="Set up AgentNexus in your environment" >}}
+  {{< card link="basic-concepts" title="Basic Concepts" icon="academic-cap" subtitle="Learn the core concepts of AgentNexus" >}}
+  {{< card link="quick-start" title="Quick Start" subtitle="Build your first agent in minutes" >}}
+  {{< card link="project-organization" title="Project Organization" icon="folder" subtitle="Best practices for organizing your agent projects" >}}
 {{< /cards >}}
 
 ## Prerequisites
@@ -36,7 +36,7 @@ Before you begin, make sure you have:
 If you're eager to get started, here's the quick installation command:
 
 ```bash
-pip install fast-agents
+pip install agentnexus
 ```
 
 For more detailed installation instructions and options, see the [Installation](installation) page.

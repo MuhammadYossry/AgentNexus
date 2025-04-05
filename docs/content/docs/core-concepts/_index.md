@@ -16,12 +16,12 @@ The AgentNexus framework is built around several key concepts that work together
 ## What's in this section
 
 {{< cards >}}
-  {{< card link="core-concepts/agents" title="Agents" icon="user-circle" subtitle="Definition, configuration, and capabilities" >}}
-  {{< card link="core-concepts/actions" title="Actions" icon="user-circle" subtitle="Creating and registering agent actions" >}}
-  {{< card link="core-concepts/workflows" title="Workflows" icon="user-circle" subtitle="Building multi-step processes" >}}
-  {{< card link="core-concepts/ui-components" title="UI Components" icon="user-circle" subtitle="Overview of UI component system" >}}
+  {{< card link="agents" title="Agents" icon="user-circle" subtitle="Definition, configuration, and capabilities" >}}
+  {{< card link="actions" title="Actions" icon="user-circle" subtitle="Creating and registering agent actions" >}}
+  {{< card link="workflows" title="Workflows" icon="user-circle" subtitle="Building multi-step processes" >}}
+  {{< card link="ui-components" title="UI Components" icon="user-circle" subtitle="Overview of UI component system" >}}
   {{< card link="core-concepts/event-handling" title="Event Handling" icon="bell" subtitle="How the event dispatch system works" >}}
-  {{< card link="core-concepts/context-management" title="Context Management" icon="variable" subtitle="Preserving state between interactions" >}}
+  {{< card link="context-management" title="Context Management" icon="variable" subtitle="Preserving state between interactions" >}}
 {{< /cards >}}
 
 ## How These Concepts Work Together
@@ -44,7 +44,7 @@ Understanding these concepts and their relationships is essential for effective 
     <div class="card h-100">
       <div class="card-body">
         <h5 class="card-title">
-          <a href="core-concepts/agents">Agents →</a>
+          <a href="agents">Agents →</a>
         </h5>
         <p class="card-text">
           Start by learning about agent definition and configuration.

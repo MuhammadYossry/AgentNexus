@@ -16,11 +16,11 @@ AgentNexus includes a powerful UI component system that allows you to create ric
 ## Available Components
 
 {{< cards >}}
-  {{< card link="ui-components/form-components" title="Form Components" icon="user-circle" subtitle="Interactive data collection forms" >}}
-  {{< card link="ui-components/table-components" title="Table Components" icon="user-circle" subtitle="Tabular data display with interactions" >}}
-  {{< card link="ui-components/code-editor-components" title="Code Editor Components" icon="user-circle" subtitle="Code editing with syntax highlighting" >}}
-  {{< card link="ui-components/markdown-components" title="Markdown Components" icon="document-text" subtitle="Formatted text display" >}}
-  {{< card link="ui-components/custom-components" title="Custom Components" icon="user-circle" subtitle="Creating your own components" >}}
+  {{< card link="form-components" title="Form Components" icon="user-circle" subtitle="Interactive data collection forms" >}}
+  {{< card link="table-components" title="Table Components" icon="user-circle" subtitle="Tabular data display with interactions" >}}
+  {{< card link="code-editor-components" title="Code Editor Components" icon="user-circle" subtitle="Code editing with syntax highlighting" >}}
+  {{< card link="markdown-components" title="Markdown Components" icon="document-text" subtitle="Formatted text display" >}}
+  {{< card link="custom-components" title="Custom Components" icon="user-circle" subtitle="Creating your own components" >}}
 {{< /cards >}}
 
 ## Key Benefits
@@ -144,7 +144,7 @@ async def interactive_registration(input_data) -> UIResponse:
     <div class="card h-100">
       <div class="card-body">
         <h5 class="card-title">
-          <a href="ui-components/form-components">Form Components →</a>
+          <a href="form-components">Form Components →</a>
         </h5>
         <p class="card-text">
           Learn about creating interactive forms for data collection.
