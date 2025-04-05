@@ -10,7 +10,7 @@ from fastapi import FastAPI, Response
 
 from agentnexus.base_types import AgentConfig, ActionType, UIResponse, UIComponentUpdate
 from agentnexus.action_manager import (
-    agent_action, get_action_registry, ActionRegistry, 
+    agent_action, get_action_registry, ActionRegistry,
     configure_action_routes, ActionEndpointInfo
 )
 
@@ -176,12 +176,9 @@ async def test_action_handler_execution(simple_agent_config):
 @pytest.mark.asyncio
 async def test_action_with_template(simple_agent_config):
     """Test action with template response."""
-    # Mock the template path and content
-    with patch('pathlib.Path') as mock_path:
-        mock_file = MagicMock()
-        mock_file.exists.return_value = True
-        mock_file.read_text.return_value = "# Response Template\n\nResult: {{ result }}\nStatus: {{ status }}"
-        mock_path.return_value = mock_file
+    # Mock just the specific Path methods we need
+    with patch('pathlib.Path.exists', return_value=True), \
+         patch('pathlib.Path.read_text', return_value="# Response Template\n\nResult: {{ result }}\nStatus: {{ status }}"):
 
         # Define action with template
         @agent_action(
@@ -201,22 +198,13 @@ async def test_action_with_template(simple_agent_config):
         registry = get_action_registry(simple_agent_config.name)
         action_info = registry.actions["template-action"]
 
-        # Create a mock response to capture the rendered template
-        mock_response = MagicMock(spec=Response)
-        # Patch the Response class
-        with patch('agentnexus.action_manager.Response', return_value=mock_response):
-            # Mock Template.render to return a fixed string
-            with patch('agentnexus.action_manager.Template') as MockTemplate:
-                mock_template_instance = MagicMock()
-                mock_template_instance.render.return_value = "# Rendered Template\n\nResult: Template result\nStatus: success"
-                MockTemplate.return_value = mock_template_instance
-                # Execute the handler directly - don't try to access the handler attribute
-                test_input = TestInput(query="test query")
-                result = await action_info.handler(test_input)
-                # We can still verify that the handler executed correctly
-                assert isinstance(result, TestOutput)
-                assert "test query" in result.result
-                assert result.status == "success"
+        # Test the handler directly
+        test_input = TestInput(query="test query")
+        result = await action_info.handler(test_input)
+
+        assert isinstance(result, TestOutput)
+        assert "test query" in result.result
+        assert result.status == "success"
 
 @pytest.mark.asyncio
 async def test_configure_action_routes():
@@ -243,7 +231,7 @@ async def test_configure_action_routes():
     # Verify routes were added
     route_paths = [route.path for route in app.routes]
     expected_path = f"/agents/{agent_slug}/actions/test-action"
-    # The route might not be added in the test environment due to the complexity 
+    # The route might not be added in the test environment due to the complexity
     # of FastAPI's routing system, but we can check that the function attempts to add it
     assert endpoint_info.route_path == expected_path
 
@@ -279,4 +267,4 @@ async def test_action_with_ui_components(simple_agent_config, form_component):
     assert isinstance(result, UIResponse)
     assert "status" in result.data
     assert len(result.ui_updates) == 1
-    assert result.ui_updates[0].key == "test_form" 
+    assert result.ui_updates[0].key == "test_form"
