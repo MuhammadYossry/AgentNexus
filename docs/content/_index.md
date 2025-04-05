@@ -33,7 +33,7 @@ AgentNexus provides a comprehensive framework for developing AI/LLM agents:
 - **Workflow-Driven Design**: Build multi-step UI workflows with state management
 - **Rich Component Library**: Tables, forms, code editors, and markdown displays
 - **Automatic Event Handling**: Simplified component event management
-- **Context-Aware State**: Preserve state across workflow steps and sessions
+- **Context-Aware State**: Preserve state across workflow steps with sessions
 
 ## Quick Example
 

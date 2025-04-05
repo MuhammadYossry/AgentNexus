@@ -2,7 +2,6 @@
 
 [![CI/CD](MuhammadYossry/AgentNexus/actions/workflows/ci.yml/badge.svg)](https://github.com/MuhammadYossry/AgentNexus/actions/workflows/ci.yml)
 [![PyPI version](https://badge.fury.io/py/agentnexus.svg)](https://badge.fury.io/py/agentnexus)
-[![Python Versions](https://img.shields.io/pypi/pyversions/agentnexus.svg)](https://pypi.org/project/agentnexus/)
 
 > ⚠️ **ALPHA STAGE**: This library is currently in alpha.
 
