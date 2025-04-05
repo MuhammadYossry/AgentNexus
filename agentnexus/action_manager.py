@@ -104,7 +104,7 @@ def agent_action(
         logger.debug(f"Decorating function: {func.__name__}")
         template_path = None
         if response_template_md is not None:
-            template_path = Path(__file__).parent / "templates" / response_template_md
+            template_path = Path(Path(__file__).parent, "templates", response_template_md)
             logger.debug(f"Template path: {template_path}")
 
         # Process UI components - handle both direct components and factories

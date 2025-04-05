@@ -191,7 +191,7 @@ class AgentRegistry:
                         if not template_path.is_absolute():
                             # Try relative to project root first
                             project_root = Path(__file__).parent.parent
-                            template_path = project_root / "agents_manifest" / "templates" / template_path.name
+                            template_path = Path(project_root, "agents_manifest", "templates", template_path.name)
 
                         if template_path.exists():
                             template_content = template_path.read_text()
