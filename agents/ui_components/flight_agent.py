@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from fast_agents.ui_components import FormComponent, FormField, TableComponent, TableColumn, MarkdownComponent
+from agentnexus.ui_components import FormComponent, FormField, TableComponent, TableColumn, MarkdownComponent
 
 from agents.ui_handlers.flight_agent import handle_form_submit, handle_seat_selection
 

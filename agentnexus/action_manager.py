@@ -7,9 +7,9 @@ from functools import wraps
 from loguru import logger
 from pathlib import Path
 from jinja2 import Template
-from fast_agents.base_types import ActionType, AgentConfig, slugify, UIResponse
-from fast_agents.ui_components import UIComponent
-from fast_agents.event_dispatcher import global_event_dispatcher
+from agentnexus.base_types import ActionType, AgentConfig, slugify, UIResponse
+from agentnexus.ui_components import UIComponent
+from agentnexus.event_dispatcher import global_event_dispatcher
 
 class ActionMetadata(BaseModel):
     """Metadata container for capturing comprehensive information about an agent action."""
@@ -141,7 +141,7 @@ def agent_action(
         type_hints = get_type_hints(func)
         # Get input model
         input_model = next(
-            (param.annotation for param in sig.parameters.values() 
+            (param.annotation for param in sig.parameters.values()
              if hasattr(param.annotation, 'model_json_schema')),
             None
         )
@@ -236,7 +236,7 @@ def agent_action(
                     elif isinstance(result, dict) and 'ui_updates' in result:
                         return UIResponse(**result)
                     else:
-                        return UIResponse(data=result, ui_updates=[])    
+                        return UIResponse(data=result, ui_updates=[])
                 return result
             except Exception as e:
                 logger.error(f"Error in action handler: {str(e)}", exc_info=True)

@@ -8,14 +8,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from jinja2 import Template
 
-from fast_agents.base_types import (
+from agentnexus.base_types import (
     Capability, ActionType, WorkflowStepType, AgentConfig, slugify,
     Workflow, WorkflowStep, WorkflowTransition, WorkflowDataMapping,
     UIResponse
 )
-from fast_agents.action_manager import ActionRegistry, get_action_registry, ActionEndpointInfo
-from fast_agents.workflow_manager import WorkflowRegistry, configure_workflow_routes, get_workflow_registry
-from fast_agents.event_dispatcher import global_event_dispatcher, EventDispatchError
+from agentnexus.action_manager import ActionRegistry, get_action_registry, ActionEndpointInfo
+from agentnexus.workflow_manager import WorkflowRegistry, configure_workflow_routes, get_workflow_registry
+from agentnexus.event_dispatcher import global_event_dispatcher, EventDispatchError
 
 class AgentManager:
     """Manages the lifecycle and configuration of multiple agents within a FastAPI application.
@@ -99,7 +99,7 @@ class AgentRegistry:
         ... )
     """
     def __init__(
-        self, 
+        self,
         base_url: str,
         name: str,
         version: str,
@@ -279,7 +279,7 @@ class AgentRegistry:
                                 start_endpoint["output_schema"] = step_endpoint["output_schema"]
                             if 'uiComponents' in step_endpoint:
                                 start_endpoint["uiComponents"] = step_endpoint["uiComponents"]
-                            
+
                             workflow_data["endpoints"]["start"] = start_endpoint
                     else:
                         logger.warning(f"No handler found for step {step.id} in workflow {workflow.id}")
@@ -416,7 +416,7 @@ def configure_agent_routes(
             workflow_registry.register_workflow(workflow)
             logger.debug(f"Registered workflow in registry: {workflow.id}")
             logger.debug(f"Setting up workflow: {workflow.id}")
-           
+
             # Start route
             start_path = f"/agents/{agent_slug}/workflow/{workflow.id}/start"
             logger.debug(f"Registering workflow start: {start_path}")

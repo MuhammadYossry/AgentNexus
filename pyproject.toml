@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentnexus"
+version = "0.0.1"
+description = "Python Library for AI/LLM Agent Development with UI-Driven Workflows"
+readme = "README.md"
+authors = [{name = "Yossry"}]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+]
+dependencies = [
+    "fastapi>=0.115.6",
+    "pydantic>=2.10.3",
+    "uvicorn>=0.32.1",
+    "loguru>=0.7.3",
+    "jinja2>=3.1.5",
+    "redis>=5.2.1",
+    "pydantic-settings>=2.7.1",
+    "openai>=1.59.3"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/MuhammadYossry/agentnexus"
+"Documentation" = "https://muhammadyossry.github.io/agentnexus/"
+"Bug Tracker" = "https://github.com/MuhammadYossry/agentnexus/issues"
+
+[tool.setuptools]
+packages = ["agentnexus"]

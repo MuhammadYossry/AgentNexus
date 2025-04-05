@@ -1,0 +1,13 @@
+POSTGRES_USER="postgres"
+POSTGRES_PASSWORD="postgres"
+POSTGRES_DB="agentshub"
+POSTGRES_HOST="db"
+POSTGRES_PORT=5432
+PGADMIN_EMAIL="ex@example.com"
+PGADMIN_PASSWORD=CHANGE_ME
+LLM_PROVIDER="deepseek"  # or "openai", etc
+LLM_BASE_URL="https://api.deepseek.com"
+LLM_API_KEY="sk-your-api-key"
+LLM_MODEL="deepseek-chat"
+LLM_TIMEOUT=50
+LLM_DRY_RUN=False

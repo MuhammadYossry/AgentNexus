@@ -1,12 +1,12 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi import HTTPException, BackgroundTasks, Request
 from pathlib import Path
 import json
 import black
 import datetime
 from typing import List, Any
 from loguru import logger
-from fast_agents.base_types import AgentConfig, Capability, ActionType
-from fast_agents.action_manager import agent_action
+from agentnexus.base_types import AgentConfig, Capability, ActionType
+from agentnexus.action_manager import agent_action
 
 from agents.models.code_agent_v1 import (
     ChatInput, ChatOutput, GenerateCodeInput, GenerateCodeOutput,

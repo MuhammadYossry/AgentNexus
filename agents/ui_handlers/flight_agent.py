@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 import random
 import datetime
 from loguru import logger
-from fast_agents.base_types import UIResponse, UIComponentUpdate
+from agentnexus.base_types import UIResponse, UIComponentUpdate
 
 async def handle_form_submit(
     action: str,  # Will receive 'search_seats'
@@ -14,7 +14,7 @@ async def handle_form_submit(
     try:
         # Generate sample seat data
         seat_class = selected_class if selected_class else "economy"
-        
+
         if seat_class == "economy":
             rows = range(10, 30)
             price_base = 150.00
@@ -24,7 +24,7 @@ async def handle_form_submit(
         else:  # First class
             rows = range(1, 4)
             price_base = 950.00
-        
+
         sample_seats = [
             {
                 "seat_number": f"{row}{letter}",

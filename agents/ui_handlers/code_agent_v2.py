@@ -10,8 +10,8 @@ import re
 from fastapi import HTTPException
 from loguru import logger
 
-from fast_agents.base_types import WorkflowStepResponse, UIComponentUpdate
-from fast_agents.ui_components import UIComponent
+from agentnexus.base_types import WorkflowStepResponse, UIComponentUpdate
+from agentnexus.ui_components import UIComponent
 
 # Define standard context keys for consistent reference
 CONTEXT_KEYS = {
@@ -225,8 +225,8 @@ async def handle_continue_form_submit(
     logger.debug(f"Continue form - context keys: {list(context.keys())}")
     # Determine best code version to carry forward with multiple fallbacks
     improved_code = (
-        context.get("improved_code", "") or 
-        context.get("code", "") or 
+        context.get("improved_code", "") or
+        context.get("code", "") or
         context.get("improved_code_code", "")
     )
     original_code = context.get("original_code", "") or context.get("code", "")
@@ -258,8 +258,8 @@ async def handle_improve_continue_submit(input_data: Dict[str, Any]) -> Workflow
     logger.debug(f"Context keys available: {list(context.keys())}")
     # Get the current improved code with multiple fallbacks
     improved_code_content = (
-        context.get("improved_code", "") or 
-        context.get("code", "") or 
+        context.get("improved_code", "") or
+        context.get("code", "") or
         context.get("improved_code_code", "")  # Check component-specific key too
     )
 
@@ -345,9 +345,9 @@ async def handle_add_types(
     context = kwargs.get("context", {})
     # Simplified type addition for demonstration
     typed_code = code.replace("def fibonacci(n):", "def fibonacci(n: int) -> list:")
-    typed_code = typed_code.replace("def calculate_statistics(numbers):", 
+    typed_code = typed_code.replace("def calculate_statistics(numbers):",
                                  "def calculate_statistics(numbers: list) -> dict:")
-    typed_code = typed_code.replace("def process_data(data_list):", 
+    typed_code = typed_code.replace("def process_data(data_list):",
                                  "def process_data(data_list: list) -> list:")
     logger.debug(f"Added type annotations to code")
     # Create comprehensive context updates
@@ -393,8 +393,8 @@ async def handle_add_docs(
         if f'def {func}(' in documented_code and '"""' not in documented_code.split(f'def {func}(')[1].split('\n')[0:3]:
             indentation = re.search(rf'([ \t]*)def\s+{func}\s*\(', documented_code).group(1)
             docstring = f'\n{indentation}    """\n{indentation}    {func} function.\n{indentation}    \n{indentation}    Returns:\n{indentation}        Result of the operation.\n{indentation}    """\n'
-            documented_code = re.sub(rf'def\s+{func}\s*\([^)]*\):\s*\n', 
-                                   lambda m: m.group(0) + docstring, 
+            documented_code = re.sub(rf'def\s+{func}\s*\([^)]*\):\s*\n',
+                                   lambda m: m.group(0) + docstring,
                                    documented_code)
     logger.debug(f"Added docstrings to code")
 

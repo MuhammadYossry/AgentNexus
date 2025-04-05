@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from enum import Enum
 
-from fast_agents.base_types import UIResponse
+from agentnexus.base_types import UIResponse
 
 class BaseModelCamel(BaseModel):
     """Base model that configures camelCase support."""

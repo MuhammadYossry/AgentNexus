@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 import datetime
 from loguru import logger
-from fast_agents.base_types import ActionType, Capability, AgentConfig, UIComponentUpdate
-from fast_agents.action_manager import agent_action
+from agentnexus.base_types import ActionType, Capability, AgentConfig, UIComponentUpdate
+from agentnexus.action_manager import agent_action
 
 from agents.models.flight_agent import (
     SeatClass, SeatClassChoices, FlightDetails, SeatPreference, FlightSearchInput, FlightSearchOutput,
@@ -107,7 +107,7 @@ async def search_flights(input_data: FlightSearchInput) -> FlightSearchOutput:
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-  
+
 @agent_action(
     agent_config=flight_agent_app,
     action_type=ActionType.GENERATE,

@@ -6,7 +6,7 @@ from datetime import datetime
 import re
 from pydantic import BaseModel, Field
 
-from fast_agents.ui_components import UIComponent
+from agentnexus.ui_components import UIComponent
 
 class ActionType(str, Enum):
     """Enumerate the types of actions an agent can perform.
@@ -162,7 +162,7 @@ class WorkflowStep(BaseModel):
     id: str
     type: Optional[WorkflowStepType] = WorkflowStepType.UI_STEP
     action: Optional[str] = None
-    transitions: Optional[List[WorkflowTransition]] = None 
+    transitions: Optional[List[WorkflowTransition]] = None
 
 class Workflow(BaseModel):
     """Represents a complete workflow definition.

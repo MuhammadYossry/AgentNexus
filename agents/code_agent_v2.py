@@ -2,16 +2,16 @@
 from typing import List, Dict, Any, Optional, Callable, Union
 from loguru import logger
 import re
-from fast_agents.base_types import (
+from agentnexus.base_types import (
     AgentConfig, Capability, UIComponentUpdate, WorkflowStepResponse,
     Workflow, WorkflowStep, WorkflowStepType
 )
-from fast_agents.manifest_generator import configure_agent, ActionType
-from fast_agents.ui_components import (
+from agentnexus.manifest_generator import configure_agent, ActionType
+from agentnexus.ui_components import (
     CodeEditorComponent, MarkdownComponent, TableComponent,
     FormComponent, TableColumn, FormField
 )
-from fast_agents.workflow_manager import workflow_step
+from agentnexus.workflow_manager import workflow_step
 
 from agents.ui_components.code_agent_v2 import (
     code_input, language_selector, handle_analyze_continue_submit,
@@ -201,8 +201,7 @@ async def handle_analyze_step(input_data) -> WorkflowStepResponse:
             for name, details in functions.items()
         ])
         # Generate analysis report
-        analysis_text = f"""## Code Analysis Results
-
+        analysis_text = f"""
 ### Functions Analyzed
 {function_list}
 

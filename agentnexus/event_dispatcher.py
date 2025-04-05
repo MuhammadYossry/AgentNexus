@@ -5,8 +5,8 @@ from typing import Dict, Any, Callable, Union
 import inspect
 from loguru import logger
 
-from fast_agents.base_types import UIResponse
-from fast_agents.ui_components import UIComponent
+from agentnexus.base_types import UIResponse
+from agentnexus.ui_components import UIComponent
 
 class EventDispatchError(Exception):
     """Error raised during event dispatching."""

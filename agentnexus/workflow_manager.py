@@ -1,16 +1,15 @@
 from typing import Dict, Callable, Optional, List, Tuple, Any
 from fastapi import FastAPI, HTTPException
 from functools import wraps
-from fast_agents.session_manager import session_manager
 from loguru import logger
 import inspect
-from fast_agents.base_types import (
+from agentnexus.base_types import (
     AgentConfig, Workflow, WorkflowStepMetadata,
     ActionType, slugify, UIComponentUpdate, WorkflowStepResponse
 )
-from fast_agents.ui_components import UIComponent
-from fast_agents.session_manager import SessionManager
-from fast_agents.event_dispatcher import global_event_dispatcher, EventDispatchError
+from agentnexus.ui_components import UIComponent
+from agentnexus.session_manager import SessionManager, session_manager
+from agentnexus.event_dispatcher import global_event_dispatcher, EventDispatchError
 
 # =========================================================================
 # DEFAULT EVENT HANDLERS AND REGISTRATION
@@ -362,10 +361,10 @@ def workflow_step(
     return decorator
 
 def create_step_metadata(
-    workflow_id: str, 
-    step_id: str, 
-    name: str, 
-    description: str, 
+    workflow_id: str,
+    step_id: str,
+    name: str,
+    description: str,
     ui_components: Optional[List[UIComponent]],
     allow_dynamic_ui: bool
 ) -> WorkflowStepMetadata:
@@ -381,8 +380,8 @@ def create_step_metadata(
     )
 
 def register_step_components(
-    ui_components: Optional[List[UIComponent]], 
-    workflow_id: str, 
+    ui_components: Optional[List[UIComponent]],
+    workflow_id: str,
     step_id: str
 ):
     """Register step UI components with the global dispatcher."""
@@ -416,8 +415,8 @@ def extract_input_data(*args, **kwargs) -> Tuple[Any, Optional[Dict[str, Any]]]:
     return input_data, form_data
 
 async def handle_component_event(
-    form_data: Optional[Dict[str, Any]], 
-    input_data: Any, 
+    form_data: Optional[Dict[str, Any]],
+    input_data: Any,
     metadata: WorkflowStepMetadata
 ) -> Optional[Dict[str, Any]]:
     """Handle component events and return a response if an event was processed."""
@@ -436,7 +435,7 @@ async def handle_component_event(
             event_data=form_data
         )
         if not event_result:
-            return None 
+            return None
         logger.debug(f"Event handler succeeded with result: {event_result}")
         # Create UI updates from result
         ui_updates = create_ui_updates_from_event(component_key, event_result)
@@ -609,8 +608,8 @@ class WorkflowExecutionManager:
         return handler_info
 
     async def _handle_step_execution(
-        self, 
-        data: Dict[str, Any], 
+        self,
+        data: Dict[str, Any],
         session: Dict[str, Any],
         handler: Callable
     ) -> WorkflowStepResponse:
@@ -722,14 +721,14 @@ def configure_workflow_routes(app: FastAPI, registry: WorkflowRegistry, agent_sl
         )
 
 def register_workflow_start_endpoint(
-    app: FastAPI, 
-    workflow_id: str, 
+    app: FastAPI,
+    workflow_id: str,
     workflow: Workflow,
     registry: WorkflowRegistry,
     agent_slug: str
 ):
     """Register the workflow start endpoint."""
-    @app.post(f"/agents/{agent_slug}/workflows/{workflow_id}/start", 
+    @app.post(f"/agents/{agent_slug}/workflows/{workflow_id}/start",
              description=f"Start the {workflow.name} workflow")
     async def start_workflow(
         workflow_id: str = workflow_id,
@@ -742,7 +741,7 @@ def register_workflow_start_endpoint(
             workflow = registry.get_workflow(workflow_id)
             if not workflow:
                 raise HTTPException(404, "Workflow not found")
-            
+
             # Create session
             session_id = session_manager.create_session()
             session = {
