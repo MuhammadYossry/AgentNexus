@@ -12,15 +12,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pathlib import Path
 
-from fast_agents.base_types import (
+from agentnexus.base_types import (
     AgentConfig, Capability, Workflow, WorkflowStep, WorkflowStepType
 )
-from fast_agents.ui_components import (
+from agentnexus.ui_components import (
     FormComponent, MarkdownComponent, CodeEditorComponent, 
     TableComponent, FormField, TableColumn
 )
-from fast_agents.manifest_generator import AgentManager
-from fast_agents.session_manager import SessionManager
+from agentnexus.manifest_generator import AgentManager
+from agentnexus.session_manager import SessionManager
 
 # ============================================================================
 # Core Fixtures
@@ -65,9 +65,9 @@ def mock_uuid():
 @pytest.fixture(autouse=True)
 def reset_registries():
     """Reset all registries between tests to prevent test pollution."""
-    from fast_agents.action_manager import agent_registries
-    from fast_agents.workflow_manager import agent_workflow_registries
-    from fast_agents.manifest_generator import agent_registries as manifest_registries
+    from agentnexus.action_manager import agent_registries
+    from agentnexus.workflow_manager import agent_workflow_registries
+    from agentnexus.manifest_generator import agent_registries as manifest_registries
 
     # Store original values
     original_action_registries = dict(agent_registries)
@@ -86,7 +86,7 @@ def reset_registries():
 @pytest.fixture(autouse=True)
 def reset_event_dispatcher():
     """Reset the event dispatcher between tests."""
-    from fast_agents.event_dispatcher import global_event_dispatcher
+    from agentnexus.event_dispatcher import global_event_dispatcher
     # Store original registered components and handlers
     original_components = dict(global_event_dispatcher.registered_components)
     original_handlers = dict(global_event_dispatcher.event_handlers)

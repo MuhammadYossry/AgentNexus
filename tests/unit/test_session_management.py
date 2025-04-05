@@ -6,11 +6,11 @@ from unittest.mock import patch, MagicMock
 import json
 from datetime import datetime
 
-from fast_agents.session_manager import SessionManager
+from agentnexus.session_manager import SessionManager
 
 def test_session_manager_initialization(mock_redis):
     """Test initialization of SessionManager."""
-    with patch('fast_agents.session_manager.redis.Redis', return_value=mock_redis):
+    with patch('agentnexus.session_manager.redis.Redis', return_value=mock_redis):
         manager = SessionManager()
         # Check initialization
         assert manager.redis is mock_redis
@@ -226,7 +226,7 @@ def test_session_manager_fallback_to_memory():
     # Mock Redis to raise connection error in a way that allows handling
     from unittest.mock import patch, MagicMock
     
-    with patch('fast_agents.session_manager.redis.Redis') as mock_redis_class:
+    with patch('agentnexus.session_manager.redis.Redis') as mock_redis_class:
         # Configure Redis mock to fail only on ping
         mock_instance = MagicMock()
         # Define ping side effect to fail only on first call
@@ -242,7 +242,7 @@ def test_session_manager_fallback_to_memory():
         mock_redis_class.return_value = mock_instance
         
         # Import here to avoid initialization at module level
-        from fast_agents.session_manager import SessionManager
+        from agentnexus.session_manager import SessionManager
         
         # Override constructor to handle ping errors
         original_init = SessionManager.__init__
@@ -290,7 +290,7 @@ def test_environment_variable_configuration():
         os.environ["REDIS_DB"] = "1"
         os.environ["SESSION_TTL"] = "7200"
         # Mock Redis to avoid actual connection
-        with patch('fast_agents.session_manager.redis.Redis') as mock_redis:
+        with patch('agentnexus.session_manager.redis.Redis') as mock_redis:
             # Create instance
             manager = SessionManager()
             # Check that environment variables were used

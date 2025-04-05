@@ -1,6 +1,8 @@
 # AgentNexus: Python Library for AI/LLM Agent Development with UI-Driven Workflows
 
 [![CI/CD](MuhammadYossry/AgentNexus/actions/workflows/ci.yml/badge.svg)](https://github.com/MuhammadYossry/AgentNexus/actions/workflows/ci.yml)
+[![PyPI version](https://badge.fury.io/py/agentnexus.svg)](https://badge.fury.io/py/agentnexus)
+[![Python Versions](https://img.shields.io/pypi/pyversions/agentnexus.svg)](https://pypi.org/project/agentnexus/)
 
 > ⚠️ **ALPHA STAGE**: This library is currently in alpha.
 
@@ -32,7 +34,26 @@ The library provides a declarative approach to building AI agents using Python d
 ![UI Screenshot 1](https://github.com/user-attachments/assets/b7e47c80-8741-43b8-b492-591277710997)
 ![UI Screenshot 2](https://github.com/user-attachments/assets/0b4297c5-62c2-4df5-8154-39c2c37a277e)
 
-## 🔧 Local Installation & Development
+## 🛠️ Installation
+
+### Installing from PyPI (Recommended)
+
+```bash
+# Install the latest release
+pip install agentnexus
+
+# Or with a specific version
+pip install agentnexus==0.1.0
+```
+
+### Installing with uv (Faster Installation)
+
+```bash
+pip install uv  # If you don't have uv installed
+uv pip install agentnexus
+```
+
+## 🔧 Local Development
 
 ### Prerequisites
 - Python 3.8+

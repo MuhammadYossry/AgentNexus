@@ -2,7 +2,7 @@
 Tests for agent configuration functionality.
 """
 import pytest
-from fast_agents.base_types import AgentConfig, Capability, Workflow, WorkflowStep, WorkflowStepType, slugify
+from agentnexus.base_types import AgentConfig, Capability, Workflow, WorkflowStep, WorkflowStepType, slugify
 
 def test_agent_config_initialization(simple_capability):
     """Test that AgentConfig initializes correctly with basic attributes."""

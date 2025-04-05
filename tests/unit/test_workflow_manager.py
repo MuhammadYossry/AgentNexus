@@ -8,15 +8,15 @@ import json
 from pydantic import BaseModel
 from fastapi import FastAPI
 
-from fast_agents.base_types import (
+from agentnexus.base_types import (
     AgentConfig, Workflow, WorkflowStep, WorkflowStepType, 
     WorkflowStepResponse, UIComponentUpdate
 )
-from fast_agents.workflow_manager import (
+from agentnexus.workflow_manager import (
     workflow_step, get_workflow_registry, WorkflowRegistry,
     ensure_workflow_step_response, WorkflowExecutionManager
 )
-from fast_agents.ui_components import UIComponent
+from agentnexus.ui_components import UIComponent
 
 class TestModelMixin(BaseModel):
     """Mixin to add dict-like behaviors to test models."""
@@ -105,7 +105,7 @@ def test_workflow_step_handler_registration(test_workflow_registry, test_workflo
         return {"status": "success"}
 
     # Create simple metadata
-    from fast_agents.base_types import WorkflowStepMetadata
+    from agentnexus.base_types import WorkflowStepMetadata
     metadata = WorkflowStepMetadata(
         workflow_id=test_workflow.id,
         step_id="step1",
@@ -147,7 +147,7 @@ def test_get_step_handler(test_workflow_registry, test_workflow):
         return {"status": "success"}
 
     # Create simple metadata
-    from fast_agents.base_types import WorkflowStepMetadata
+    from agentnexus.base_types import WorkflowStepMetadata
     metadata = WorkflowStepMetadata(
         workflow_id=test_workflow.id,
         step_id="step1",
@@ -256,7 +256,7 @@ def test_workflow_step_response_normalization():
 
 def test_prepare_components_with_context():
     """Test preparing UI components with session context."""
-    from fast_agents.workflow_manager import prepare_components_with_context
+    from agentnexus.workflow_manager import prepare_components_with_context
 
     # Create test components
     markdown = MagicMock(spec=UIComponent)
@@ -281,8 +281,8 @@ def test_prepare_components_with_context():
         "form_data": {"name": "Test Name"}
     }
     # Prepare components
-    with patch('fast_agents.workflow_manager.get_supported_events', return_value=["submit"]):
-        with patch('fast_agents.workflow_manager.populate_component_state') as mock_populate:
+    with patch('agentnexus.workflow_manager.get_supported_events', return_value=["submit"]):
+        with patch('agentnexus.workflow_manager.populate_component_state') as mock_populate:
             prepared = prepare_components_with_context([markdown, form], context)
             # Check results
             assert len(prepared) == 2
@@ -304,7 +304,7 @@ async def test_workflow_execution_manager(test_workflow_registry, test_workflow,
         )
 
     # Create metadata
-    from fast_agents.base_types import WorkflowStepMetadata
+    from agentnexus.base_types import WorkflowStepMetadata
     metadata = WorkflowStepMetadata(
         workflow_id=test_workflow.id,
         step_id="step1",
@@ -390,7 +390,7 @@ async def test_component_event_handling(simple_agent_config, test_workflow, form
         }
     }
     # Mock event dispatcher
-    with patch('fast_agents.workflow_manager.global_event_dispatcher') as mock_dispatcher:
+    with patch('agentnexus.workflow_manager.global_event_dispatcher') as mock_dispatcher:
         # Configure mock to return a result
         mock_dispatcher.dispatch_event = AsyncMock()
         mock_dispatcher.dispatch_event.return_value = {
@@ -417,9 +417,9 @@ async def test_configure_workflow_routes(test_app, test_workflow_registry, test_
     mock_manager.preview_workflow_step = AsyncMock()
     # Patch WorkflowExecutionManager constructor and configure_workflow_routes
     # to not be async (or return a mock async function)
-    with patch('fast_agents.workflow_manager.WorkflowExecutionManager', return_value=mock_manager), \
-         patch('fast_agents.workflow_manager.configure_workflow_routes') as mock_configure:
-        from fast_agents.workflow_manager import configure_workflow_routes
+    with patch('agentnexus.workflow_manager.WorkflowExecutionManager', return_value=mock_manager), \
+         patch('agentnexus.workflow_manager.configure_workflow_routes') as mock_configure:
+        from agentnexus.workflow_manager import configure_workflow_routes
         # This wrapper simulates calling an async function, but allows us to avoid awaiting
         # since we're mocking it
         mock_configure("test-agent", test_workflow_registry, test_app)

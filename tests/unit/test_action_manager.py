@@ -8,8 +8,8 @@ import json
 from pydantic import BaseModel
 from fastapi import FastAPI, Response
 
-from fast_agents.base_types import AgentConfig, ActionType, UIResponse, UIComponentUpdate
-from fast_agents.action_manager import (
+from agentnexus.base_types import AgentConfig, ActionType, UIResponse, UIComponentUpdate
+from agentnexus.action_manager import (
     agent_action, get_action_registry, ActionRegistry, 
     configure_action_routes, ActionEndpointInfo
 )
@@ -204,9 +204,9 @@ async def test_action_with_template(simple_agent_config):
         # Create a mock response to capture the rendered template
         mock_response = MagicMock(spec=Response)
         # Patch the Response class
-        with patch('fast_agents.action_manager.Response', return_value=mock_response):
+        with patch('agentnexus.action_manager.Response', return_value=mock_response):
             # Mock Template.render to return a fixed string
-            with patch('fast_agents.action_manager.Template') as MockTemplate:
+            with patch('agentnexus.action_manager.Template') as MockTemplate:
                 mock_template_instance = MagicMock()
                 mock_template_instance.render.return_value = "# Rendered Template\n\nResult: Template result\nStatus: success"
                 MockTemplate.return_value = mock_template_instance

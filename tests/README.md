@@ -1,12 +1,12 @@
-# Fast Agents Testing Guide
+# AgentNexus Testing Guide
 
-This directory contains tests for the Fast Agents framework. The tests are organized into unit tests and integration tests.
+This directory contains tests for the AgentNexus framework. The tests are organized into unit tests and integration tests.
 
 ## Test Categories
 
 ### Unit Tests
 
-Unit tests focus on testing individual components of the Fast Agents framework:
+Unit tests focus on testing individual components of the AgentNexus framework:
 
 - **Manifest Generation**: Tests for generating agent manifests and configuring agents
 - **Agent Actions**: Tests for registering and executing agent actions

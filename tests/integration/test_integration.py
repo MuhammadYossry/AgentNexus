@@ -8,14 +8,14 @@ import json
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from fast_agents.base_types import (
+from agentnexus.base_types import (
     AgentConfig, Capability, Workflow, WorkflowStep, WorkflowStepType,
     WorkflowStepResponse, UIComponentUpdate, ActionType
 )
-from fast_agents.workflow_manager import workflow_step
-from fast_agents.action_manager import agent_action
-from fast_agents.manifest_generator import configure_agent, setup_agent_routes, AgentManager
-from fast_agents.ui_components import (
+from agentnexus.workflow_manager import workflow_step
+from agentnexus.action_manager import agent_action
+from agentnexus.manifest_generator import configure_agent, setup_agent_routes, AgentManager
+from agentnexus.ui_components import (
     FormComponent, MarkdownComponent, CodeEditorComponent,
     FormField
 )
@@ -120,7 +120,7 @@ async def test_simplified_agent_lifecycle(test_app, session_manager, mock_uuid):
         ]
     )
     # Define a simple action
-    with patch('fast_agents.action_manager.global_event_dispatcher'):
+    with patch('agentnexus.action_manager.global_event_dispatcher'):
         @agent_action(
             agent_config=test_agent,
             action_type=ActionType.GENERATE,
@@ -147,8 +147,8 @@ async def test_simplified_agent_lifecycle(test_app, session_manager, mock_uuid):
         )
 
         # Configure agent without awaiting
-        with patch('fast_agents.action_manager.configure_action_routes'), \
-             patch('fast_agents.workflow_manager.configure_workflow_routes'):
+        with patch('agentnexus.action_manager.configure_action_routes'), \
+             patch('agentnexus.workflow_manager.configure_workflow_routes'):
             # Call configure_agent directly
             configure_agent(
                 app=test_app,
@@ -174,8 +174,8 @@ async def test_simplified_agent_lifecycle(test_app, session_manager, mock_uuid):
 async def test_complete_agent_lifecycle(code_analysis_agent, test_app, test_client, session_manager, mock_uuid):
     """Integration test for complete agent lifecycle."""
     # 1. Configure the agent
-    with patch('fast_agents.workflow_manager.global_event_dispatcher'), \
-         patch('fast_agents.action_manager.global_event_dispatcher'):
+    with patch('agentnexus.workflow_manager.global_event_dispatcher'), \
+         patch('agentnexus.action_manager.global_event_dispatcher'):
         # Define a simple action
         @agent_action(
             agent_config=code_analysis_agent,

@@ -4,7 +4,7 @@ Tests for manifest generation functionality.
 import pytest
 from unittest.mock import patch, MagicMock
 
-from fast_agents.manifest_generator import (
+from agentnexus.manifest_generator import (
     AgentRegistry, configure_agent, AgentManager, setup_agent_routes
 )
 
@@ -82,14 +82,14 @@ def test_agent_manifest_with_workflows(workflow_agent_config):
     assert len(workflow["steps"]) == 3
     assert workflow["initial_step"] == "step1"
 
-@patch('fast_agents.workflow_manager.configure_workflow_routes')
-@patch('fast_agents.action_manager.configure_action_routes')
+@patch('agentnexus.workflow_manager.configure_workflow_routes')
+@patch('agentnexus.action_manager.configure_action_routes')
 def test_configure_agent(test_app, simple_agent_config):
     """Test agent configuration with FastAPI application."""
     pass
 
-@patch('fast_agents.manifest_generator.agent_registries')
-@patch('fast_agents.manifest_generator.Path')
+@patch('agentnexus.manifest_generator.agent_registries')
+@patch('agentnexus.manifest_generator.Path')
 def test_setup_agent_routes(mock_path, mock_registries, test_app):
     """Test setting up agent routes in FastAPI app."""
     # Mock Path for template loading
@@ -121,8 +121,8 @@ def test_agent_manager(test_app, simple_agent_config):
     """Test AgentManager for adding and setting up agents."""
     agent_manager = AgentManager(base_url="http://localhost:9000")
     # Mock the configure_agent function
-    with patch('fast_agents.manifest_generator.configure_agent') as mock_configure_agent, \
-         patch('fast_agents.manifest_generator.setup_agent_routes') as mock_setup_routes:
+    with patch('agentnexus.manifest_generator.configure_agent') as mock_configure_agent, \
+         patch('agentnexus.manifest_generator.setup_agent_routes') as mock_setup_routes:
         agent_manager.add_agent(simple_agent_config)
         agent_manager.setup_agents(test_app)
         # Assert configure_agent was called with our agent
@@ -136,7 +136,7 @@ def test_agent_manager(test_app, simple_agent_config):
 def test_agent_manifest_endpoint(test_app, test_client, simple_agent_config):
     """Test the agent manifest endpoint returns correct manifest."""
     # Mock the relevant functions
-    with patch('fast_agents.manifest_generator.agent_registries') as mock_registries:
+    with patch('agentnexus.manifest_generator.agent_registries') as mock_registries:
         # Create a mock registry that returns our data
         registry = MagicMock()
         registry.name = simple_agent_config.name
@@ -194,12 +194,12 @@ def test_agent_manifest_endpoint(test_app, test_client, simple_agent_config):
 
 def test_multiple_agents_setup():
     """Test configuring multiple agents with AgentManager."""
-    from fast_agents.base_types import AgentConfig
+    from agentnexus.base_types import AgentConfig
 
     agent1 = AgentConfig(name="Agent1", version="1.0", description="First agent")
     agent2 = AgentConfig(name="Agent2", version="1.0", description="Second agent")
     # Create manager and add agents
-    from fast_agents.manifest_generator import AgentManager
+    from agentnexus.manifest_generator import AgentManager
     manager = AgentManager(base_url="http://localhost:9000")
     manager.add_agent(agent1)
     manager.add_agent(agent2)
@@ -209,7 +209,7 @@ def test_multiple_agents_setup():
     assert manager.agents[1] == agent2
 
     # Mock setup function to verify all agents are configured
-    with patch('fast_agents.manifest_generator.configure_agent') as mock_configure:
+    with patch('agentnexus.manifest_generator.configure_agent') as mock_configure:
         app = MagicMock()
         manager.setup_agents(app)
         # Verify configure_agent called for each agent

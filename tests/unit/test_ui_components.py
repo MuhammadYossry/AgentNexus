@@ -5,12 +5,12 @@ import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 import inspect
 
-from fast_agents.ui_components import (
+from agentnexus.ui_components import (
     UIComponent, TableComponent, FormComponent, CodeEditorComponent,
     MarkdownComponent, TableColumn, FormField, ComponentEventType,
     EventContext
 )
-from fast_agents.event_dispatcher import (
+from agentnexus.event_dispatcher import (
     ComponentEventDispatcher, global_event_dispatcher, EventDispatchError
 )
 
