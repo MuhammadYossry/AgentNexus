@@ -1,5 +1,6 @@
 # Hugo configuration file
 title: AgentNexus - Alpha
+baseURL: "https://muhammadyossry.github.io/AgentNexus/"
 
 # import hextra as module
 module:
@@ -48,4 +49,4 @@ params:
 
   editURL:
     enable: true
-    base: "https://github.com/imfing/hextra-starter-template/edit/main/content"
+    base: "https://github.com/MuhammadYossry/AgentNexus/edit/main/content"
