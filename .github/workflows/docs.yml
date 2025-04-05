@@ -40,10 +40,17 @@ jobs:
       - name: Build
         run: cd docs && hugo --minify
 
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+
       - name: Upload artifact
+        run: |
+          mkdir -p ./_site
+          cp -r ./docs/public/* ./_site/
+          find ./_site -type f | wc -l
+
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v1
-        with:
-          path: ./docs/public
 
   deploy:
     environment:
@@ -54,4 +61,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v1
